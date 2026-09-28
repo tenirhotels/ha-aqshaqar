@@ -9,6 +9,7 @@ from homeassistant.components.sensor import SensorEntity, SensorDeviceClass
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_registry import async_get as async_get_entity_registry
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -174,7 +175,7 @@ class AqshaqarUpdateSensor(
         self._attr_unique_id = f"{DOMAIN}_forecast_update"
         self._attr_name = "Forecast update"
         self._attr_device_class = SensorDeviceClass.TIMESTAMP
-        self._attr_entity_category = "diagnostic"
+        self._attr_entity_category = EntityCategory.DIAGNOSTIC
         self._attr_icon = "mdi:update"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, DEVICE_ID)},
