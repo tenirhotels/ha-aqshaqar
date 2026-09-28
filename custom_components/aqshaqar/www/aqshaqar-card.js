@@ -92,15 +92,40 @@ class AqshaqarCard extends HTMLElement {
         low: lows.length ? Math.min(...lows) : null,
         rain: rain.length ? rain.reduce((a, b) => a + b, 0) : null,
         snow: snow.length ? snow.reduce((a, b) => a + b, 0) : null,
+        snowExpected: items.some(x => x.snow_expected === true),
       };
     });
+  }
+
+  _nextSnow(level) {
+    const state = this._state(level, "next_snow");
+    if (state && state.state !== "unknown" && state.state !== "unavailable" && state.state !== "—") {
+      return state.state;
+    }
+
+    const conditions = this._state(level, "conditions");
+    const source = conditions?.attributes?.next_snow;
+    if (source?.amount_cm != null && source?.start) {
+      const d = new Date(source.start);
+      if (!Number.isNaN(d.getTime())) {
+        return `❄ ${source.amount_cm:g} cm · ${d.toLocaleDateString([], { day: "numeric", month: "short" })}, ${d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+      }
+    }
+
+    const day = this._dailyForecast(level).find(
+      item => (typeof item.snow === "number" && item.snow > 0) || item.snowExpected
+    );
+    if (!day) return "—";
+
+    const date = this._formatDate(day.date);
+    return day.snow != null ? `❄ ${day.snow:g} cm · ${date}` : `❄ Snow expected · ${date}`;
   }
 
   _dailyRow(level) {
     const days = this._dailyForecast(level);
 
     return `
-      <div class="forecast-title">Forecast</div>
+      <div class="forecast-title">Snowfall forecast</div>
       <div class="days">
         ${days.map(day => `
           <div class="day">
@@ -110,8 +135,10 @@ class AqshaqarCard extends HTMLElement {
               <b>${this._escape(day.high ?? "—")}°</b>
               <span>${this._escape(day.low ?? "—")}°</span>
             </div>
+            <div class="day-snow">
+              ${day.snow != null ? `❄ ${this._escape(day.snow)} cm` : day.snowExpected ? "❄ Snow" : ""}
+            </div>
             <div class="day-precip">
-              ${day.snow != null ? `❄ ${this._escape(day.snow)} cm` : ""}
               ${day.rain != null ? `🌧 ${this._escape(day.rain)} mm` : ""}
             </div>
           </div>
@@ -126,8 +153,7 @@ class AqshaqarCard extends HTMLElement {
     const low = this._value(level, "temperature_low");
     const wind = this._value(level, "wind_speed");
     const humidity = this._value(level, "humidity");
-    const nextSnowState = this._state(level, "next_snow");
-    const nextSnow = nextSnowState?.state || "—";
+    const nextSnow = this._nextSnow(level);
     const updateAt = this._state(level, "forecast_update")?.state;
 
     return `
@@ -236,8 +262,14 @@ class AqshaqarCard extends HTMLElement {
         .day-temp { display:flex; justify-content:center; gap:7px; }
         .day-temp b { font-size:14px; }
         .day-temp span { font-size:12px; color:var(--secondary-text-color); }
+        .day-snow {
+          min-height:18px; margin-top:6px;
+          font-size:12px; font-weight:700;
+          color:var(--primary-color);
+          line-height:1.35;
+        }
         .day-precip {
-          min-height:28px; margin-top:6px;
+          min-height:18px; margin-top:2px;
           font-size:9px; color:var(--secondary-text-color); line-height:1.35;
         }
         @media (min-width: 1000px) {
