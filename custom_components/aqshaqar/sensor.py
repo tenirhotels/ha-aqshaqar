@@ -93,7 +93,6 @@ SENSOR_DEFINITIONS: tuple[dict[str, Any], ...] = (
         "key": "next_snow",
         "name": "Next snow",
         "icon": "mdi:snowflake",
-        "unit": "cm",
     },
     {
         "key": "forecast_update_at",
@@ -192,6 +191,31 @@ class AqshaqarSensor(CoordinatorEntity[AqshaqarCoordinator], SensorEntity):
             return f"{amount:g} cm"
 
     @staticmethod
+    def _format_forecast_summary(level: dict[str, Any]) -> str:
+        """Return the first known upcoming snowfall as a compact text summary."""
+        for day in AqshaqarSensor._snow_forecast_by_day(level):
+            snow_cm = day.get("snow_cm")
+            if isinstance(snow_cm, (int, float)) and snow_cm > 0:
+                date_value = str(day.get("date") or "")
+                try:
+                    dt = datetime.fromisoformat(date_value)
+                    label = dt.strftime("%-d %b")
+                except ValueError:
+                    label = date_value
+                return f"❄ {snow_cm:g} cm · {label}"
+
+            if day.get("snow_expected") is True:
+                date_value = str(day.get("date") or "")
+                try:
+                    dt = datetime.fromisoformat(date_value)
+                    label = dt.strftime("%-d %b")
+                except ValueError:
+                    label = date_value
+                return f"❄ Snow expected · {label}"
+
+        return "No snowfall in forecast"
+
+    @staticmethod
     def _snow_forecast_by_day(level: dict[str, Any]) -> list[dict[str, Any]]:
         """Group the raw Snow-Forecast periods into daily snowfall totals."""
         grouped: dict[str, list[dict[str, Any]]] = {}
@@ -253,9 +277,7 @@ class AqshaqarSensor(CoordinatorEntity[AqshaqarCoordinator], SensorEntity):
         if key == "next_snow":
             return self._format_next_snow(self._level_data.get("next_snow"))
         if key == "snow_forecast":
-            daily = self._snow_forecast_by_day(self._level_data)
-            first = daily[0] if daily else None
-            return first.get("snow_cm") if first and first.get("snow_cm") is not None else None
+            return self._format_forecast_summary(self._level_data)
         if key == "forecast_update_at":
             value = self._level_data.get("forecast_update_at")
             if not value:
@@ -312,6 +334,14 @@ class AqshaqarSensor(CoordinatorEntity[AqshaqarCoordinator], SensorEntity):
                 "amount_cm": next_snow.get("amount_cm"),
                 "start": next_snow.get("start"),
                 "description": next_snow.get("description"),
+            }
+
+        if key == "snow_forecast":
+            return {
+                **base_attributes,
+                "next_snow": level.get("next_snow"),
+                "forecast_update_at": level.get("forecast_update_at"),
+                "forecast": self._snow_forecast_by_day(level),
             }
 
         return base_attributes
