@@ -20,7 +20,13 @@ class AqshaqarCard extends HTMLElement {
   }
 
   _state(level) {
-    return this._hass?.states?.[`sensor.aqshaqar_${level}_snow_forecast`] ?? null;
+    const states = this._hass?.states || {};
+    return (
+      states[`sensor.aqshaqar_${level}_snow_forecast`] ||
+      states[`sensor.${level}_snow_forecast`] ||
+      states[`sensor.${level}_forecast`] ||
+      null
+    );
   }
 
   _value(level) {
@@ -100,7 +106,10 @@ class AqshaqarCard extends HTMLElement {
       ["top", "Top", 3163],
     ];
 
-    const update = this._hass.states?.["sensor.aqshaqar_forecast_update"]?.state;
+    const updateState =
+      this._hass.states?.["sensor.aqshaqar_forecast_update"] ||
+      this._hass.states?.["sensor.forecast_update"];
+    const update = updateState?.state;
 
     this.shadowRoot.innerHTML = `
       <style>
@@ -126,7 +135,7 @@ class AqshaqarCard extends HTMLElement {
         }
         .station-name { font-size:18px; font-weight:700; }
         .elevation { font-size:12px; color:var(--secondary-text-color); margin-top:2px; }
-        .next { font-size:18px; font-weight:700; text-align:right; }
+        .next { font-size:18px; font-weight:700; text-align:right; color:var(--primary-color); }
         .label {
           margin-top:12px;
           margin-bottom:7px;
