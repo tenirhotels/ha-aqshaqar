@@ -1,12 +1,12 @@
 {
   "domain": "aqshaqar",
-  "name": "AQSHAQAR",
+  "name": "Aqshaqar",
   "codeowners": ["@tenirhotels"],
   "config_flow": true,
-  "documentation": "https://github.com/tenirhotels/aqshaqar",
+  "documentation": "https://github.com/tenirhotels/ha-aqshaqar",
   "integration_type": "hub",
   "iot_class": "cloud_polling",
-  "issue_tracker": "https://github.com/tenirhotels/aqshaqar/issues",
+  "issue_tracker": "https://github.com/tenirhotels/ha-aqshaqar/issues",
   "requirements": [
     "beautifulsoup4>=4.13.0"
   ],
