@@ -108,7 +108,7 @@ class AqshaqarCard extends HTMLElement {
     if (source?.amount_cm != null && source?.start) {
       const d = new Date(source.start);
       if (!Number.isNaN(d.getTime())) {
-        return `❄ ${source.amount_cm:g} cm · ${d.toLocaleDateString([], { day: "numeric", month: "short" })}, ${d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+        return `❄ ${Number(source.amount_cm).toLocaleString([], { maximumFractionDigits: 1 })} cm · ${d.toLocaleDateString([], { day: "numeric", month: "short" })}, ${d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
       }
     }
 
@@ -118,7 +118,7 @@ class AqshaqarCard extends HTMLElement {
     if (!day) return "—";
 
     const date = this._formatDate(day.date);
-    return day.snow != null ? `❄ ${day.snow:g} cm · ${date}` : `❄ Snow expected · ${date}`;
+    return day.snow != null ? `❄ ${Number(day.snow).toLocaleString([], { maximumFractionDigits: 1 })} cm · ${date}` : `❄ Snow expected · ${date}`;
   }
 
   _dailyRow(level) {
