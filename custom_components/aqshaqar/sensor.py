@@ -173,6 +173,7 @@ class AqshaqarUpdateSensor(
     def __init__(self, coordinator: AqshaqarCoordinator) -> None:
         super().__init__(coordinator)
         self._attr_unique_id = f"{DOMAIN}_forecast_update"
+        self._attr_suggested_object_id = f"{DOMAIN}_forecast_update"
         self._attr_name = "Forecast update"
         self._attr_device_class = SensorDeviceClass.TIMESTAMP
         self._attr_entity_category = EntityCategory.DIAGNOSTIC
