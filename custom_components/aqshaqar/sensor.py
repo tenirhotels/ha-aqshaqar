@@ -1,11 +1,15 @@
-"""AQSHAQAR sensors."""
+"""Aqshaqar sensors."""
 
 from __future__ import annotations
 
 from datetime import datetime
 from typing import Any
 
-from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorStateClass
+from homeassistant.components.sensor import (
+    SensorDeviceClass,
+    SensorEntity,
+    SensorStateClass,
+)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfTemperature
 from homeassistant.core import HomeAssistant, callback
@@ -13,7 +17,7 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, NAME
+from .const import DEVICE_ID, DOMAIN, NAME, RESORT, WEBSITE_URL
 from .coordinator import AqshaqarCoordinator
 
 
@@ -82,8 +86,8 @@ SENSOR_DEFINITIONS: tuple[dict[str, Any], ...] = (
         "name": "Freezing level",
         "icon": "mdi:altimeter",
         "unit": "m",
-        "device_class": SensorDeviceClass.DISTANCE,
         "state_class": SensorStateClass.MEASUREMENT,
+        "display_precision": 0,
     },
     {
         "key": "next_snow",
@@ -98,6 +102,11 @@ SENSOR_DEFINITIONS: tuple[dict[str, Any], ...] = (
         "device_class": SensorDeviceClass.TIMESTAMP,
         "entity_category": EntityCategory.DIAGNOSTIC,
     },
+    {
+        "key": "snow_forecast",
+        "name": "Forecast",
+        "icon": "mdi:snowflake-variant",
+    },
 )
 
 
@@ -106,7 +115,7 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities,
 ) -> None:
-    """Set up AQSHAQAR sensors."""
+    """Set up Aqshaqar sensors."""
     coordinator: AqshaqarCoordinator = hass.data[DOMAIN][entry.entry_id]
     entities: list[AqshaqarSensor] = []
 
@@ -120,7 +129,7 @@ async def async_setup_entry(
 
 
 class AqshaqarSensor(CoordinatorEntity[AqshaqarCoordinator], SensorEntity):
-    """One AQSHAQAR sensor bound to one elevation."""
+    """One Aqshaqar sensor for one Shymbulak elevation."""
 
     _attr_has_entity_name = True
 
@@ -134,20 +143,26 @@ class AqshaqarSensor(CoordinatorEntity[AqshaqarCoordinator], SensorEntity):
         super().__init__(coordinator)
         self._level_key = level_key
         self._definition = definition
+        self._level_name = str(level["name"])
         self._elevation = int(level["elevation_m"])
-        self._attr_unique_id = f"aqshaqar_{level_key}_{definition['key']}"
-        self._attr_name = definition["name"]
+
+        sensor_key = definition["key"]
+        self._attr_unique_id = f"{DOMAIN}_{level_key}_{sensor_key}"
+        self._attr_suggested_object_id = f"{level_key}_{sensor_key}"
+        self._attr_name = f"{self._level_name} {definition['name']}"
         self._attr_icon = definition.get("icon")
         self._attr_native_unit_of_measurement = definition.get("unit")
         self._attr_device_class = definition.get("device_class")
         self._attr_state_class = definition.get("state_class")
         self._attr_entity_category = definition.get("entity_category")
+        self._attr_suggested_display_precision = definition.get("display_precision")
+
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, level_key)},
-            name=f"Aqshaqar {level['name']}",
-            manufacturer=NAME,
-            model=f"Shymbulak {self._elevation} m",
-            configuration_url=str(level["source"]),
+            identifiers={(DOMAIN, DEVICE_ID)},
+            name=NAME,
+            manufacturer="Tenir Shymbulak",
+            model=f"{RESORT} Snow Forecast",
+            configuration_url=WEBSITE_URL,
         )
 
     @property
@@ -159,6 +174,73 @@ class AqshaqarSensor(CoordinatorEntity[AqshaqarCoordinator], SensorEntity):
         forecast = self._level_data.get("forecast") or []
         return forecast[0] if forecast else None
 
+    @staticmethod
+    def _format_next_snow(next_snow: dict[str, Any] | None) -> str:
+        """Return amount plus exact next-snow date/time, or a dash."""
+        if not next_snow:
+            return "—"
+
+        amount = next_snow.get("amount_cm")
+        start = next_snow.get("start")
+        if amount is None or not start:
+            return "—"
+
+        try:
+            dt = datetime.fromisoformat(start)
+            return f"{amount:g} cm · {dt.day} {dt.strftime('%b')}, {dt:%H:%M}"
+        except (TypeError, ValueError):
+            return f"{amount:g} cm"
+
+    @staticmethod
+    def _snow_forecast_by_day(level: dict[str, Any]) -> list[dict[str, Any]]:
+        """Group the raw Snow-Forecast periods into daily snowfall totals."""
+        grouped: dict[str, list[dict[str, Any]]] = {}
+
+        for period in level.get("forecast") or []:
+            date_value = period.get("date")
+            if not date_value:
+                continue
+            grouped.setdefault(str(date_value), []).append(period)
+
+        result: list[dict[str, Any]] = []
+        for date_value, periods in grouped.items():
+            numeric_snow = [
+                float(period["snow_amount_cm"])
+                for period in periods
+                if isinstance(period.get("snow_amount_cm"), (int, float))
+            ]
+            numeric_rain = [
+                float(period["rain_mm"])
+                for period in periods
+                if isinstance(period.get("rain_mm"), (int, float))
+            ]
+            highs = [
+                float(period["temp_max_c"])
+                for period in periods
+                if isinstance(period.get("temp_max_c"), (int, float))
+            ]
+            lows = [
+                float(period["temp_min_c"])
+                for period in periods
+                if isinstance(period.get("temp_min_c"), (int, float))
+            ]
+
+            result.append(
+                {
+                    "date": date_value,
+                    "weekday": __import__("datetime").date.fromisoformat(date_value).strftime("%a"),
+                    "snow_cm": round(sum(numeric_snow), 1) if numeric_snow else None,
+                    "snow_expected": any(
+                        period.get("snow_expected") is True for period in periods
+                    ),
+                    "rain_mm": round(sum(numeric_rain), 1) if numeric_rain else None,
+                    "temp_high_c": max(highs) if highs else None,
+                    "temp_low_c": min(lows) if lows else None,
+                }
+            )
+
+        return result
+
     @property
     def native_value(self):
         key = self._definition["key"]
@@ -169,7 +251,11 @@ class AqshaqarSensor(CoordinatorEntity[AqshaqarCoordinator], SensorEntity):
         if key == "wind_speed_kmh":
             return ((current or {}).get("wind") or {}).get("speed_kmh")
         if key == "next_snow":
-            return (self._level_data.get("next_snow") or {}).get("amount_cm")
+            return self._format_next_snow(self._level_data.get("next_snow"))
+        if key == "snow_forecast":
+            daily = self._snow_forecast_by_day(self._level_data)
+            first = daily[0] if daily else None
+            return first.get("snow_cm") if first and first.get("snow_cm") is not None else None
         if key == "forecast_update_at":
             value = self._level_data.get("forecast_update_at")
             if not value:
@@ -182,7 +268,10 @@ class AqshaqarSensor(CoordinatorEntity[AqshaqarCoordinator], SensorEntity):
 
     @property
     def available(self) -> bool:
-        return super().available and self._level_key in self.coordinator.data.get("levels", {})
+        return (
+            super().available
+            and self._level_key in self.coordinator.data.get("levels", {})
+        )
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
@@ -192,11 +281,16 @@ class AqshaqarSensor(CoordinatorEntity[AqshaqarCoordinator], SensorEntity):
         if not level:
             return None
 
+        base_attributes = {
+            "level": self._level_name,
+            "elevation_m": self._elevation,
+            "date": (current or {}).get("date"),
+            "period": (current or {}).get("period"),
+        }
+
         if key == "conditions":
             return {
-                "elevation_m": level.get("elevation_m"),
-                "date": (current or {}).get("date"),
-                "period": (current or {}).get("period"),
+                **base_attributes,
                 "weather": (current or {}).get("weather"),
                 "snow_expected": (current or {}).get("snow_expected"),
                 "issued_at": level.get("issued_at"),
@@ -207,23 +301,20 @@ class AqshaqarSensor(CoordinatorEntity[AqshaqarCoordinator], SensorEntity):
 
         if key == "wind_speed_kmh":
             return {
+                **base_attributes,
                 "direction": ((current or {}).get("wind") or {}).get("direction"),
-                "date": (current or {}).get("date"),
-                "period": (current or {}).get("period"),
             }
 
         if key == "next_snow":
             next_snow = level.get("next_snow") or {}
             return {
+                **base_attributes,
+                "amount_cm": next_snow.get("amount_cm"),
                 "start": next_snow.get("start"),
                 "description": next_snow.get("description"),
             }
 
-        return {
-            "elevation_m": level.get("elevation_m"),
-            "date": (current or {}).get("date"),
-            "period": (current or {}).get("period"),
-        }
+        return base_attributes
 
     @callback
     def _handle_coordinator_update(self) -> None:

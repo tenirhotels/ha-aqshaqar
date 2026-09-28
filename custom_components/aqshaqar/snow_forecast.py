@@ -1,4 +1,4 @@
-"""Snow-Forecast HTML parser used by the AQSHAQAR integration."""
+"""Snow-Forecast HTML parser used by Aqshaqar."""
 
 from __future__ import annotations
 
@@ -18,22 +18,18 @@ def parse_number(value):
     """Extract a number from text or a data attribute."""
     if value is None:
         return None
-
     value = str(value).strip()
     if value in ("", "-", "—", "–"):
         return None
-
     value = value.replace(",", ".")
     match = re.search(r"-?\d+(?:\.\d+)?", value)
     if not match:
         return None
-
     number = float(match.group())
     return int(number) if number.is_integer() else number
 
 
 def cell_text(cell):
-    """Return normalized visible text from a BeautifulSoup node."""
     if cell is None:
         return None
     value = " ".join(cell.stripped_strings)
@@ -41,25 +37,23 @@ def cell_text(cell):
 
 
 def unix_to_local(timestamp):
-    """Convert Unix timestamp to an ISO-8601 timestamp in Almaty time."""
     if timestamp is None:
         return None
     return datetime.fromtimestamp(int(timestamp), TZ).isoformat()
 
 
-def get_row(soup: BeautifulSoup, row_name: str):
+def get_row(soup, row_name: str):
     return soup.select_one(f'tr[data-row="{row_name}"]')
 
 
-def get_cells(soup: BeautifulSoup, row_name: str):
+def get_cells(soup, row_name: str):
     row = get_row(soup, row_name)
     if not row:
         return []
     return row.select("td.forecast-table__cell")
 
 
-def values_from_data_value(soup: BeautifulSoup, row_name: str, selector: str | None = None):
-    """Extract numerical values, preferring data-value when available."""
+def values_from_data_value(soup, row_name: str, selector: str | None = None):
     result = []
     for cell in get_cells(soup, row_name):
         node = cell.select_one(selector) if selector else cell
@@ -73,16 +67,14 @@ def values_from_data_value(soup: BeautifulSoup, row_name: str, selector: str | N
     return result
 
 
-def values_from_text(soup: BeautifulSoup, row_name: str):
+def values_from_text(soup, row_name: str):
     return [parse_number(cell_text(cell)) for cell in get_cells(soup, row_name)]
 
 
-def parse_dates(soup: BeautifulSoup):
-    """Expand day cells by their colspan into one date per forecast period."""
+def parse_dates(soup):
     row = get_row(soup, "days")
     if not row:
         return []
-
     result = []
     for cell in row.select("td.forecast-table__cell"):
         date_value = cell.get("data-date")
@@ -96,15 +88,14 @@ def parse_dates(soup: BeautifulSoup):
     return result
 
 
-def parse_periods(soup: BeautifulSoup):
+def parse_periods(soup):
     return [cell_text(cell) for cell in get_cells(soup, "time")]
 
 
-def parse_phrases(soup: BeautifulSoup):
+def parse_phrases(soup):
     row = get_row(soup, "phrases")
     if not row:
         return []
-
     result = []
     for cell in row.select("td.forecast-table__cell"):
         node = cell.select_one("[class*='forecast-table__phrase']")
@@ -112,11 +103,10 @@ def parse_phrases(soup: BeautifulSoup):
     return result
 
 
-def parse_weather(soup: BeautifulSoup):
+def parse_weather(soup):
     row = get_row(soup, "weather")
     if not row:
         return []
-
     result = []
     for cell in row.select("td.forecast-table__cell"):
         icon = cell.select_one("img.weather-icon")
@@ -124,18 +114,16 @@ def parse_weather(soup: BeautifulSoup):
     return result
 
 
-def parse_wind(soup: BeautifulSoup):
+def parse_wind(soup):
     row = get_row(soup, "wind")
     if not row:
         return []
-
     result = []
     for cell in row.select("td.forecast-table__cell"):
         icon = cell.select_one(".wind-icon")
         if not icon:
             result.append(None)
             continue
-
         speed = parse_number(icon.get("data-speed"))
         direction_node = icon.select_one(".wind-icon__tooltip")
         direction = cell_text(direction_node) if direction_node else None
@@ -143,8 +131,7 @@ def parse_wind(soup: BeautifulSoup):
     return result
 
 
-def parse_next_snow(soup: BeautifulSoup):
-    """Parse structured Next Snow data from JSON-LD, with HTML fallback."""
+def parse_next_snow(soup):
     for script in soup.select('script[type="application/ld+json"]'):
         raw = script.string or script.get_text()
         if not raw:
@@ -153,28 +140,22 @@ def parse_next_snow(soup: BeautifulSoup):
             data = json.loads(raw)
         except Exception:
             continue
-
         objects = data if isinstance(data, list) else [data]
         for obj in objects:
             if not isinstance(obj, dict):
                 continue
-
             accepted = obj.get("acceptedAnswer")
             if not isinstance(accepted, dict):
                 continue
-
             event = accepted.get("about")
             if not isinstance(event, dict) or event.get("@type") != "Event":
                 continue
-
             if event.get("name") != "Next snow in Shymbulak:":
                 continue
-
             amount = None
             additional = event.get("additionalProperty")
             if isinstance(additional, dict) and additional.get("name") == "snowfall":
                 amount = parse_number(additional.get("value"))
-
             return {
                 "amount_cm": amount,
                 "start": event.get("startDate"),
@@ -191,14 +172,12 @@ def parse_next_snow(soup: BeautifulSoup):
                 "start": None,
                 "description": cell_text(node),
             }
-
     return None
 
 
 def parse_page_times(html: str):
     server_match = re.search(r'"serverTime"\s*:\s*(\d+)', html)
     update_match = re.search(r'"forecastUpdateTime"\s*:\s*(\d+)', html)
-
     server_ts = int(server_match.group(1)) if server_match else None
     update_ts = int(update_match.group(1)) if update_match else None
 
@@ -209,7 +188,11 @@ def parse_page_times(html: str):
     if update_ts:
         update_in_seconds = max(
             0,
-            int((datetime.fromtimestamp(update_ts, TZ) - datetime.now(TZ)).total_seconds()),
+            int(
+                (
+                    datetime.fromtimestamp(update_ts, TZ) - datetime.now(TZ)
+                ).total_seconds()
+            ),
         )
 
     return {
@@ -220,7 +203,7 @@ def parse_page_times(html: str):
 
 
 def parse_level_html(level_key: str, config: dict[str, object], html: str) -> dict:
-    """Parse one Snow-Forecast level from already downloaded HTML."""
+    """Parse one Snow-Forecast level from downloaded HTML."""
     started = datetime.now(TZ)
     soup = BeautifulSoup(html, "html.parser")
 
@@ -229,7 +212,6 @@ def parse_level_html(level_key: str, config: dict[str, object], html: str) -> di
     phrases = parse_phrases(soup)
     weather = parse_weather(soup)
     wind = parse_wind(soup)
-
     snow = values_from_data_value(soup, "snow", ".snow-amount")
     rain = values_from_data_value(soup, "rain", ".rain-amount")
     temp_max = values_from_data_value(soup, "temperature-max", ".temp-value")
@@ -267,26 +249,22 @@ def parse_level_html(level_key: str, config: dict[str, object], html: str) -> di
         phrase = phrases[i]
         weather_value = weather[i]
         combined = " ".join(x for x in (phrase, weather_value) if x).lower()
-        snow_expected = "snow" in combined
-
-        forecast.append(
-            {
-                "index": i,
-                "date": dates[i],
-                "period": periods[i],
-                "phrase": phrase,
-                "weather": weather_value,
-                "snow_expected": snow_expected,
-                "snow_amount_cm": snow[i],
-                "rain_mm": rain[i],
-                "temp_max_c": temp_max[i],
-                "temp_min_c": temp_min[i],
-                "chill_c": chill[i],
-                "freezing_level_m": freezing[i],
-                "humidity_pct": humidity[i],
-                "wind": wind[i],
-            }
-        )
+        forecast.append({
+            "index": i,
+            "date": dates[i],
+            "period": periods[i],
+            "phrase": phrase,
+            "weather": weather_value,
+            "snow_expected": "snow" in combined,
+            "snow_amount_cm": snow[i],
+            "rain_mm": rain[i],
+            "temp_max_c": temp_max[i],
+            "temp_min_c": temp_min[i],
+            "chill_c": chill[i],
+            "freezing_level_m": freezing[i],
+            "humidity_pct": humidity[i],
+            "wind": wind[i],
+        })
 
     finished = datetime.now(TZ)
     return {

@@ -34,10 +34,6 @@ class AqshaqarCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Initialize the coordinator."""
         self._session = async_get_clientsession(hass)
         self._level_configs = LEVELS
-
-        # This is used only until Snow-Forecast gives us its own next
-        # forecast-update time. After a successful fetch, update_interval is
-        # replaced with the earliest update_in_seconds reported by the source.
         initial_interval = timedelta(seconds=FALLBACK_RETRY_SECONDS)
 
         super().__init__(
@@ -91,7 +87,6 @@ class AqshaqarCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if not candidates:
             return FALLBACK_RETRY_SECONDS
 
-        # Avoid a tight loop if the source says the update time has just passed.
         return max(MIN_UPDATE_DELAY_SECONDS, min(candidates))
 
     async def _async_update_data(self) -> dict[str, Any]:
@@ -120,9 +115,6 @@ class AqshaqarCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             successful_levels[level_key] = result
 
         if not successful_levels:
-            # Keep the coordinator's previous data intact and use a short
-            # retry. DataUpdateCoordinator will honor retry_after for the
-            # next scheduled refresh.
             details = "; ".join(
                 f"{key}: {value}" for key, value in errors.items()
             ) or "all forecast levels failed"

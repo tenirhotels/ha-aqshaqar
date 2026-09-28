@@ -4,9 +4,11 @@ from __future__ import annotations
 
 DOMAIN = "aqshaqar"
 NAME = "Aqshaqar"
-VERSION = "0.1.2"
+VERSION = "0.3.2"
 
 RESORT = "Shymbulak"
+WEBSITE_URL = "http://tenirhotels.com/"
+DEVICE_ID = "shymbulak"
 TIMEZONE = "Asia/Almaty"
 BASE_URL = "https://www.snow-forecast.com/resorts/Chimbulak/6day"
 

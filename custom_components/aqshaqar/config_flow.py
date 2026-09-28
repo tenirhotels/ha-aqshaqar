@@ -1,4 +1,4 @@
-"""Config flow for AQSHAQAR."""
+"""Config flow for Aqshaqar."""
 
 from __future__ import annotations
 
@@ -11,18 +11,18 @@ from .const import DOMAIN, NAME, VERSION
 
 
 class AqshaqarConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    """Handle the AQSHAQAR config flow."""
+    """Handle the Aqshaqar config flow."""
 
     VERSION = 1
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None):
-        """Install AQSHAQAR without additional user credentials."""
+        """Install Aqshaqar without additional user credentials."""
         if self._async_current_entries():
             return self.async_abort(reason="single_instance_allowed")
 
         if user_input is not None:
             return self.async_create_entry(
-                title=f"{NAME} — Shymbulak",
+                title=NAME,
                 data={"version": VERSION},
             )
 

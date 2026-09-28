@@ -1,7 +1,10 @@
-"""AQSHAQAR Home Assistant integration."""
+"""Aqshaqar Home Assistant integration."""
 
 from __future__ import annotations
 
+from pathlib import Path
+
+from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
@@ -9,11 +12,21 @@ from homeassistant.exceptions import ConfigEntryNotReady
 from .const import DOMAIN
 from .coordinator import AqshaqarCoordinator
 
-PLATFORMS = ("sensor",)
+PLATFORMS = ("sensor", "weather")
+CARD_URL = "/aqshaqar/aqshaqar-card.js"
+
+
+async def async_setup(hass: HomeAssistant, config: dict) -> bool:
+    """Set up Aqshaqar frontend resources."""
+    card_path = Path(__file__).parent / "www" / "aqshaqar-card.js"
+    await hass.http.async_register_static_paths(
+        [StaticPathConfig(CARD_URL, str(card_path), True)]
+    )
+    return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up AQSHAQAR from a config entry."""
+    """Set up Aqshaqar from a config entry."""
     coordinator = AqshaqarCoordinator(hass)
     try:
         await coordinator.async_config_entry_first_refresh()
@@ -33,7 +46,7 @@ async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> Non
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Unload AQSHAQAR."""
+    """Unload Aqshaqar."""
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
         hass.data[DOMAIN].pop(entry.entry_id)
