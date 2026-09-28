@@ -144,7 +144,7 @@ class AqshaqarSensor(CoordinatorEntity[AqshaqarCoordinator], SensorEntity):
         self._attr_entity_category = definition.get("entity_category")
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, level_key)},
-            name=f"AQSHAQAR — Shymbulak {level['name']}",
+            name=f"Aqshaqar {level['name']}",
             manufacturer=NAME,
             model=f"Shymbulak {self._elevation} m",
             configuration_url=str(level["source"]),

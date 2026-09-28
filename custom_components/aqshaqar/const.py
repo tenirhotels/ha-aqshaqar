@@ -1,10 +1,10 @@
-"""Constants for AQSHAQAR."""
+"""Constants for Aqshaqar."""
 
 from __future__ import annotations
 
 DOMAIN = "aqshaqar"
-NAME = "AQSHAQAR"
-VERSION = "0.1.1"
+NAME = "Aqshaqar"
+VERSION = "0.1.2"
 
 RESORT = "Shymbulak"
 TIMEZONE = "Asia/Almaty"

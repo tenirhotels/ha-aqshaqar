@@ -1,7 +1,9 @@
 {
   "domain": "aqshaqar",
   "name": "Aqshaqar",
-  "codeowners": ["@tenirhotels"],
+  "codeowners": [
+    "@tenirhotels"
+  ],
   "config_flow": true,
   "documentation": "https://github.com/tenirhotels/ha-aqshaqar",
   "integration_type": "hub",
@@ -11,5 +13,5 @@
     "beautifulsoup4>=4.13.0"
   ],
   "single_config_entry": true,
-  "version": "0.1.1"
+  "version": "0.1.2"
 }
