@@ -129,6 +129,30 @@ class AqshaqarCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             fetched_at_dt + timedelta(seconds=next_update_seconds)
         ).isoformat()
 
+        # Add one meaningful Activity entry for the shared forecast refresh.
+        # The timestamp sensor remains diagnostic, while the logbook entry
+        # makes each Snow-Forecast refresh visible in the device Activity.
+        minutes = max(1, round(next_update_seconds / 60))
+        if minutes >= 60:
+            hours = minutes // 60
+            remainder = minutes % 60
+            if remainder:
+                next_update_label = f"{hours}h {remainder}m"
+            else:
+                next_update_label = f"{hours}h"
+        else:
+            next_update_label = f"{minutes}m"
+
+        self.hass.bus.async_fire(
+            "logbook_entry",
+            {
+                "name": NAME,
+                "message": f"Forecast updated · next update in {next_update_label}",
+                "domain": "sensor",
+                "entity_id": "sensor.aqshaqar_forecast_update",
+            },
+        )
+
         return {
             "app": NAME,
             "resort": RESORT,
