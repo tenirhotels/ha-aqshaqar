@@ -67,7 +67,7 @@ class AqshaqarCard extends HTMLElement {
     if (typeof day.snow_cm === "number") {
       return `❄ ${Number(day.snow_cm).toLocaleString([], { maximumFractionDigits: 1 })} cm`;
     }
-    return day.snow_expected ? "❄ Snow expected" : "—";
+    return "—";
   }
 
   _station(level, title, elevation) {
