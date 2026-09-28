@@ -60,7 +60,7 @@ class AqshaqarCard extends HTMLElement {
       }
     }
 
-    return state.state;
+    return "—";
   }
 
   _daySnow(day) {
