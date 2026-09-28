@@ -2,12 +2,12 @@
   "config": {
     "step": {
       "user": {
-        "title": "AQSHAQAR",
-        "description": "Добавьте прогноз снега Shymbulak для Base (2220 м), Mid (2692 м) и Top (3163 м). AQSHAQAR получает актуальные данные напрямую со страниц Snow-Forecast."
+        "title": "Aqshaqar",
+        "description": "Добавьте прогноз снега Shymbulak для Base (2220 м), Mid (2692 м) и Top (3163 м). Aqshaqar получает актуальные данные напрямую со страниц Snow-Forecast."
       }
     },
     "abort": {
-      "single_instance_allowed": "AQSHAQAR уже настроен."
+      "single_instance_allowed": "Aqshaqar уже настроен."
     }
   }
 }

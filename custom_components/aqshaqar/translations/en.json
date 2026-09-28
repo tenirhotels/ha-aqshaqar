@@ -2,12 +2,12 @@
   "config": {
     "step": {
       "user": {
-        "title": "AQSHAQAR",
-        "description": "Add Shymbulak snow forecast for Base (2220 m), Mid (2692 m), and Top (3163 m). AQSHAQAR reads the live Snow-Forecast pages directly."
+        "title": "Aqshaqar",
+        "description": "Add Shymbulak snow forecast for Base (2220 m), Mid (2692 m), and Top (3163 m). Aqshaqar reads the live Snow-Forecast pages directly."
       }
     },
     "abort": {
-      "single_instance_allowed": "AQSHAQAR is already configured."
+      "single_instance_allowed": "Aqshaqar is already configured."
     }
   }
 }
