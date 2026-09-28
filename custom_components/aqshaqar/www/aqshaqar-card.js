@@ -38,7 +38,7 @@ class AqshaqarCard extends HTMLElement {
   }
 
   _formatDate(value) {
-    if (!value) return "Снега не ожидается";
+    if (!value) return "No snow expected";
     const d = new Date(`${value}T12:00:00`);
     if (Number.isNaN(d.getTime())) return value;
     return d.toLocaleDateString([], {
