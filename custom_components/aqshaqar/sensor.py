@@ -71,7 +71,7 @@ def _format_snow_summary(level: dict[str, Any]) -> str:
                 label = str(day["date"])
             return f"❄ {amount:g} cm · {label}"
 
-    return "No snowfall amount in forecast"
+    return "Снега не ожидается"
 
 
 async def async_setup_entry(
