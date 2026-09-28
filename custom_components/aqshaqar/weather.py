@@ -123,10 +123,10 @@ class AqshaqarWeather(CoordinatorEntity[AqshaqarCoordinator], WeatherEntity):
         self._attr_unique_id = f"{DOMAIN}_{level_key}_weather"
         self._attr_name = self._level_name
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, level_key)},
-            name=f"{NAME} {self._level_name}",
+            identifiers={(DOMAIN, "shymbulak")},
+            name=NAME,
             manufacturer="Tenir Shymbulak",
-            model=f"{RESORT} Snow Forecast · {self._elevation} m",
+            model=f"{RESORT} Snow Forecast",
             configuration_url=WEBSITE_URL,
         )
 
