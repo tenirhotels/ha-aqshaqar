@@ -103,7 +103,7 @@ def _day_datetime(date_value: str) -> str:
 class AqshaqarWeather(CoordinatorEntity[AqshaqarCoordinator], WeatherEntity):
     """Weather entity for one Shymbulak elevation."""
 
-    _attr_has_entity_name = True
+    _attr_has_entity_name = False
     _attr_native_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_native_wind_speed_unit = "km/h"
     _attr_native_precipitation_unit = "mm"
@@ -121,7 +121,7 @@ class AqshaqarWeather(CoordinatorEntity[AqshaqarCoordinator], WeatherEntity):
         self._elevation = int(level["elevation_m"])
 
         self._attr_unique_id = f"{DOMAIN}_{level_key}_weather"
-        self._attr_name = self._level_name
+        self._attr_name = f"{self._level_name} ({self._elevation} m)"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, "shymbulak")},
             name=NAME,
