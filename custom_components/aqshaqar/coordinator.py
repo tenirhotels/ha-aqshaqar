@@ -89,6 +89,97 @@ class AqshaqarCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         return max(MIN_UPDATE_DELAY_SECONDS, min(candidates))
 
+    @staticmethod
+    def _next_snow_label(level: dict[str, Any] | None) -> str:
+        """Format the explicit Snow-Forecast next-snow event."""
+        if not level:
+            return "—"
+
+        event = level.get("next_snow") or {}
+        amount = event.get("amount_cm")
+        start = event.get("start")
+
+        if amount is None or not start:
+            return "—"
+
+        try:
+            dt = datetime.fromisoformat(str(start))
+            return f"{amount:g} cm · {dt.day} {dt.strftime('%b')} {dt:%H:%M}"
+        except ValueError:
+            return f"{amount:g} cm"
+
+    @staticmethod
+    def _daily_snow(level: dict[str, Any] | None) -> dict[str, float | None]:
+        """Return explicit daily snowfall totals from Snow-Forecast periods."""
+        if not level:
+            return {}
+
+        grouped: dict[str, list[float]] = {}
+        for period in level.get("forecast") or []:
+            date_value = period.get("date")
+            amount = period.get("snow_amount_cm")
+            if not date_value or not isinstance(amount, (int, float)):
+                continue
+            grouped.setdefault(str(date_value), []).append(float(amount))
+
+        return {
+            date_value: round(sum(values), 1)
+            for date_value, values in grouped.items()
+        }
+
+    @classmethod
+    def _forecast_changes(
+        cls,
+        previous_levels: dict[str, Any],
+        current_levels: dict[str, Any],
+    ) -> list[str]:
+        """Describe what changed between the previous and current forecast."""
+        changes: list[str] = []
+
+        for level_key, current in current_levels.items():
+            previous = previous_levels.get(level_key)
+            if previous is None:
+                continue
+
+            level_name = str(current.get("name") or level_key.title())
+
+            old_next = cls._next_snow_label(previous)
+            new_next = cls._next_snow_label(current)
+            if old_next != new_next:
+                changes.append(
+                    f"{level_name} next snow: {old_next} → {new_next}"
+                )
+
+            old_daily = cls._daily_snow(previous)
+            new_daily = cls._daily_snow(current)
+            for date_value in sorted(set(old_daily) | set(new_daily)):
+                old_amount = old_daily.get(date_value)
+                new_amount = new_daily.get(date_value)
+                if old_amount == new_amount:
+                    continue
+
+                old_label = (
+                    f"{old_amount:g} cm" if old_amount is not None else "—"
+                )
+                new_label = (
+                    f"{new_amount:g} cm" if new_amount is not None else "—"
+                )
+
+                try:
+                    dt = datetime.fromisoformat(date_value)
+                    date_label = f"{dt.day} {dt.strftime('%b')}"
+                except ValueError:
+                    date_label = date_value
+
+                changes.append(
+                    f"{level_name} {date_label}: {old_label} → {new_label}"
+                )
+
+                if len(changes) >= 8:
+                    return changes
+
+        return changes
+
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch all levels and schedule the next poll from Snow-Forecast data."""
         tasks = [
@@ -129,29 +220,19 @@ class AqshaqarCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             fetched_at_dt + timedelta(seconds=next_update_seconds)
         ).isoformat()
 
-        # Add one meaningful Activity entry for the shared forecast refresh.
-        # The timestamp sensor remains diagnostic, while the logbook entry
-        # makes each Snow-Forecast refresh visible in the device Activity.
-        minutes = max(1, round(next_update_seconds / 60))
-        if minutes >= 60:
-            hours = minutes // 60
-            remainder = minutes % 60
-            if remainder:
-                next_update_label = f"{hours}h {remainder}m"
-            else:
-                next_update_label = f"{hours}h"
-        else:
-            next_update_label = f"{minutes}m"
-
-        self.hass.bus.async_fire(
-            "logbook_entry",
-            {
-                "name": NAME,
-                "message": f"Forecast updated · next update in {next_update_label}",
-                "domain": "sensor",
-                "entity_id": "sensor.aqshaqar_forecast_update",
-            },
-        )
+        # Show only meaningful forecast changes in device Activity.
+        # The previous successful forecast is available in self.data.
+        changes = self._forecast_changes(previous_levels, successful_levels)
+        if changes:
+            self.hass.bus.async_fire(
+                "logbook_entry",
+                {
+                    "name": NAME,
+                    "message": "Forecast changed · " + " | ".join(changes),
+                    "domain": "sensor",
+                    "entity_id": "sensor.aqshaqar_forecast_update",
+                },
+            )
 
         return {
             "app": NAME,
