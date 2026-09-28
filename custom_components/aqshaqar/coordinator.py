@@ -123,13 +123,19 @@ class AqshaqarCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         next_update_seconds = self._next_update_seconds(successful_levels)
         self.update_interval = timedelta(seconds=next_update_seconds)
 
-        fetched_at = datetime.now().astimezone().isoformat()
+        fetched_at_dt = datetime.now().astimezone()
+        fetched_at = fetched_at_dt.isoformat()
+        next_update_at = (
+            fetched_at_dt + timedelta(seconds=next_update_seconds)
+        ).isoformat()
+
         return {
             "app": NAME,
             "resort": RESORT,
             "timezone": "Asia/Almaty",
             "fetched_at": fetched_at,
             "next_update_in_seconds": next_update_seconds,
+            "next_update_at": next_update_at,
             "levels": levels,
             "errors": errors,
         }
