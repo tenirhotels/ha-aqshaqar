@@ -131,7 +131,7 @@ class AqshaqarSnowSensor(
         self._elevation = int(level["elevation_m"])
 
         self._attr_unique_id = f"{DOMAIN}_{level_key}_snow_forecast"
-        self._attr_suggested_object_id = f"{level_key}_snow_forecast"
+        self._attr_suggested_object_id = f"{DOMAIN}_{level_key}_snow_forecast"
         self._attr_name = f"{self._level_name} Snow forecast"
         self._attr_icon = "mdi:snowflake-variant"
         self._attr_device_info = DeviceInfo(
