@@ -48,7 +48,19 @@ def _snow_forecast_by_day(level: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _format_snow_summary(level: dict[str, Any]) -> str:
-    """Return the next known snowfall amount and date."""
+    """Return Snow-Forecast's explicit next-snow event first, then daily amounts."""
+    next_snow = level.get("next_snow") or {}
+    amount = next_snow.get("amount_cm")
+    start = next_snow.get("start")
+
+    if amount is not None and start:
+        try:
+            dt = datetime.fromisoformat(str(start))
+            return f"❄ {amount:g} cm · {dt.day} {dt.strftime('%b')}, {dt:%H:%M}"
+        except ValueError:
+            return f"❄ {amount:g} cm"
+
+    # Only use explicit snowfall amounts from the daily table.
     for day in _snow_forecast_by_day(level):
         amount = day.get("snow_cm")
         if isinstance(amount, (int, float)) and amount > 0:
@@ -59,15 +71,7 @@ def _format_snow_summary(level: dict[str, Any]) -> str:
                 label = str(day["date"])
             return f"❄ {amount:g} cm · {label}"
 
-        if day.get("snow_expected") is True:
-            try:
-                dt = datetime.fromisoformat(str(day["date"]))
-                label = dt.strftime("%-d %b")
-            except ValueError:
-                label = str(day["date"])
-            return f"❄ Snow expected · {label}"
-
-    return "No snowfall in forecast"
+    return "No snowfall amount in forecast"
 
 
 async def async_setup_entry(
