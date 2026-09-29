@@ -15,10 +15,10 @@ from homeassistant.helpers import entity_registry as er
 from .const import (
     DEVICE_ID,
     DOMAIN,
+    LEVELS,
     NAME,
     RESORT,
     WEBSITE_URL,
-    LEVELS,
 )
 from .coordinator import AqshaqarCoordinator
 
@@ -48,8 +48,11 @@ async def _async_migrate_weather_entity_ids(
         old_entity_id = f"weather.{DOMAIN}_{level_key}_{level_key}"
         new_entity_id = f"weather.{DOMAIN}_{level_key}_{elevation}_m"
 
-        entry = registry.async_get(old_entity_id)
-        if not entry or entry.config_entry_id != entry.entry_id:
+        registry_entry = registry.async_get(old_entity_id)
+        if (
+            not registry_entry
+            or registry_entry.config_entry_id != entry.entry_id
+        ):
             continue
 
         if registry.async_get(new_entity_id):
