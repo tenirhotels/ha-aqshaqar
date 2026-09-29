@@ -374,9 +374,10 @@ class AqshaqarCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             fetched_at_dt + timedelta(seconds=next_update_seconds)
         ).isoformat()
 
+        previous_snapshot = deepcopy(self._previous_snapshot or {})
         current_snapshot = self._snow_snapshot(levels)
         changes = self._forecast_changes(
-            (self._previous_snapshot or {}).get("levels", {}),
+            previous_snapshot.get("levels", {}),
             levels,
         )
         self._last_change = changes
@@ -385,14 +386,11 @@ class AqshaqarCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         if changes:
             event_data = self._event_data(
-                self._previous_snapshot,
+                previous_snapshot,
                 levels,
                 changes,
             )
-            # Use the snapshot that existed before persistence in the event.
-            event_data["previous"] = (
-                (self._previous_snapshot or {}).copy()
-            )
+            event_data["previous"] = previous_snapshot
             event_data["current"] = current_snapshot
 
             if self._device_id:
