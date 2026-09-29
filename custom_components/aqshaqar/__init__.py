@@ -10,6 +10,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 
 from .const import (
     DEVICE_ID,
@@ -17,6 +18,7 @@ from .const import (
     NAME,
     RESORT,
     WEBSITE_URL,
+    LEVELS,
 )
 from .coordinator import AqshaqarCoordinator
 
@@ -34,6 +36,31 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     return True
 
 
+async def _async_migrate_weather_entity_ids(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+) -> None:
+    """Fix legacy duplicated weather entity IDs without touching custom IDs."""
+    registry = er.async_get(hass)
+
+    for level_key, level in LEVELS.items():
+        elevation = int(level["elevation_m"])
+        old_entity_id = f"weather.{DOMAIN}_{level_key}_{level_key}"
+        new_entity_id = f"weather.{DOMAIN}_{level_key}_{elevation}_m"
+
+        entry = registry.async_get(old_entity_id)
+        if not entry or entry.config_entry_id != entry.entry_id:
+            continue
+
+        if registry.async_get(new_entity_id):
+            continue
+
+        registry.async_update_entity(
+            old_entity_id,
+            new_entity_id=new_entity_id,
+        )
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Aqshaqar from a config entry."""
     coordinator = AqshaqarCoordinator(hass, entry.entry_id)
@@ -49,6 +76,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         configuration_url=WEBSITE_URL,
     )
     coordinator.set_device_id(device.id)
+    await _async_migrate_weather_entity_ids(hass, entry)
 
     try:
         await coordinator.async_config_entry_first_refresh()
