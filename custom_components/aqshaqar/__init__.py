@@ -87,14 +87,16 @@ async def _async_migrate_weather_entity_ids(
         if (
             sensor_entry
             and sensor_entry.config_entry_id == entry.entry_id
-            and sensor_entry.name in {
-                f"Aqshaqar Next snow at the {level_name}",
-                f"Next snow at the {level_name}",
-            }
         ):
             registry.async_update_entity(
                 sensor_entity_id,
-                name=f"Next snow at the {level_name}",
+                has_entity_name=False,
+                name=(
+                    f"Next snow at the {level_name}"
+                    if sensor_entry.name is None
+                    or sensor_entry.name.startswith("Aqshaqar ")
+                    else sensor_entry.name
+                ),
             )
 
     for level_key in LEVELS:
