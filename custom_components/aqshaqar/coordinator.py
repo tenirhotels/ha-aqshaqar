@@ -133,7 +133,7 @@ class AqshaqarCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         previous_levels: dict[str, Any],
         current_levels: dict[str, Any],
     ) -> list[str]:
-        """Describe what changed between the previous and current forecast."""
+        """Describe meaningful snowfall changes between forecasts."""
         changes: list[str] = []
 
         for level_key, current in current_levels.items():
@@ -180,6 +180,26 @@ class AqshaqarCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         return changes
 
+    @staticmethod
+    def _forecast_event_data(
+        levels: dict[str, Any], changes: list[str]
+    ) -> dict[str, Any]:
+        """Build a compact event payload for automations and notifications."""
+        summary: dict[str, dict[str, Any]] = {}
+        for level_key, level in levels.items():
+            summary[level_key] = {
+                "name": level.get("name"),
+                "elevation_m": level.get("elevation_m"),
+                "next_snow": AqshaqarCoordinator._next_snow_label(level),
+                "daily_snow": AqshaqarCoordinator._daily_snow(level),
+            }
+
+        return {
+            "resort": RESORT,
+            "changes": changes,
+            "levels": summary,
+        }
+
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch all levels and schedule the next poll from Snow-Forecast data."""
         tasks = [
@@ -220,10 +240,13 @@ class AqshaqarCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             fetched_at_dt + timedelta(seconds=next_update_seconds)
         ).isoformat()
 
-        # Show only meaningful forecast changes in device Activity.
-        # The previous successful forecast is available in self.data.
+        # Notify Home Assistant only when snowfall data or the next-snow event
+        # actually changed. A routine hourly forecast refresh with identical
+        # snowfall data produces no event and no Activity entry.
         changes = self._forecast_changes(previous_levels, successful_levels)
         if changes:
+            event_data = self._forecast_event_data(successful_levels, changes)
+            self.hass.bus.async_fire("aqshaqar_forecast_changed", event_data)
             self.hass.bus.async_fire(
                 "logbook_entry",
                 {
