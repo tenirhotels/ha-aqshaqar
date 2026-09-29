@@ -63,6 +63,25 @@ async def _async_migrate_weather_entity_ids(
             new_entity_id=new_entity_id,
         )
 
+    for level_key in LEVELS:
+        old_entity_id = f"sensor.{DOMAIN}_{level_key}_snow_forecast"
+        new_entity_id = f"sensor.{DOMAIN}_{level_key}_forecast"
+
+        registry_entry = registry.async_get(old_entity_id)
+        if (
+            not registry_entry
+            or registry_entry.config_entry_id != entry.entry_id
+        ):
+            continue
+
+        if registry.async_get(new_entity_id):
+            continue
+
+        registry.async_update_entity(
+            old_entity_id,
+            new_entity_id=new_entity_id,
+        )
+
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Aqshaqar from a config entry."""
