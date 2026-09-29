@@ -22,7 +22,7 @@ from .coordinator import AqshaqarCoordinator
 
 PLATFORMS = ("sensor", "weather")
 CARD_URL = "/aqshaqar/aqshaqar-card.js"
-CONFIG_SCHEMA = cv.config_entry_only_config_schema()
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
