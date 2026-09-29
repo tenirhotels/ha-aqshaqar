@@ -4,7 +4,7 @@ from __future__ import annotations
 
 DOMAIN = "aqshaqar"
 NAME = "Aqshaqar"
-VERSION = "0.4.2"
+VERSION = "0.4.3"
 
 RESORT = "Shymbulak"
 WEBSITE_URL = "http://tenirhotels.com/"
