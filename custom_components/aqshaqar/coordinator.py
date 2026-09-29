@@ -157,55 +157,30 @@ class AqshaqarCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return f"{amount:g} cm"
 
     @staticmethod
-    def _daily_snow(level: dict[str, Any] | None) -> dict[str, float | None]:
-        """Return explicit daily snowfall totals, including unknown days."""
+    def _next_snow_key(level: dict[str, Any] | None) -> tuple[Any, Any]:
+        """Return only the stable Next snow fields used for comparisons."""
         if not level:
-            return {}
+            return (None, None)
 
-        daily = level.get("daily_snow")
-        if isinstance(daily, list):
-            return {
-                str(item["date"]): item.get("snow_cm")
-                for item in daily
-                if isinstance(item, dict) and item.get("date")
-            }
-
-        result: dict[str, list[float]] = {}
-        dates: list[str] = []
-
-        for period in level.get("forecast") or []:
-            date_value = period.get("date")
-            if not date_value:
-                continue
-
-            date_value = str(date_value)
-            if date_value not in dates:
-                dates.append(date_value)
-
-            amount = period.get("snow_amount_cm")
-            if isinstance(amount, (int, float)):
-                result.setdefault(date_value, []).append(float(amount))
-
-        return {
-            date_value: (
-                round(sum(result[date_value]), 1)
-                if date_value in result
-                else None
-            )
-            for date_value in dates
-        }
+        event = level.get("next_snow") or {}
+        return (
+            event.get("amount_cm"),
+            event.get("start"),
+        )
 
     @classmethod
     def _snow_snapshot(
         cls,
         levels: dict[str, Any],
     ) -> dict[str, Any]:
-        """Return only stable snowfall data used for change detection."""
+        """Persist only the stable Next snow data."""
         return {
             "levels": {
                 key: {
-                    "next_snow": level.get("next_snow"),
-                    "daily_snow": cls._daily_snow(level),
+                    "next_snow": {
+                        "amount_cm": cls._next_snow_key(level)[0],
+                        "start": cls._next_snow_key(level)[1],
+                    },
                 }
                 for key, level in levels.items()
             }
@@ -217,7 +192,7 @@ class AqshaqarCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         previous_levels: dict[str, Any],
         current_levels: dict[str, Any],
     ) -> list[str]:
-        """Describe meaningful snowfall changes, ignoring rolling horizon dates."""
+        """Report only changes to the explicit Snow-Forecast Next snow event."""
         changes: list[str] = []
 
         for level_key, current in current_levels.items():
@@ -225,67 +200,21 @@ class AqshaqarCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if previous is None:
                 continue
 
+            old_amount, old_start = cls._next_snow_key(previous)
+            new_amount, new_start = cls._next_snow_key(current)
+
+            if (old_amount, old_start) == (new_amount, new_start):
+                continue
+
             level_name = str(current.get("name") or level_key.title())
 
-            old_next = cls._next_snow_label(previous)
-            new_next = cls._next_snow_label(current)
-            if old_next != new_next:
-                changes.append(
-                    f"{level_name} next snow: {old_next} → {new_next}"
-                )
+            old_label = cls._next_snow_label(previous)
+            new_label = cls._next_snow_label(current)
 
-            old_daily = cls._daily_snow(previous)
-            new_daily = cls._daily_snow(current)
-
-            for date_value in sorted(set(old_daily) & set(new_daily)):
-                old_amount = old_daily[date_value]
-                new_amount = new_daily[date_value]
-                if old_amount == new_amount:
-                    continue
-
-                # Do not notify about a source becoming temporarily unknown
-                # unless there was a concrete snowfall value before.
-                if old_amount is None and new_amount is None:
-                    continue
-
-                old_label = (
-                    f"{old_amount:g} cm" if old_amount is not None else "—"
-                )
-                new_label = (
-                    f"{new_amount:g} cm" if new_amount is not None else "—"
-                )
-
-                try:
-                    dt = datetime.fromisoformat(date_value)
-                    date_label = f"{dt.day} {dt.strftime('%b')}"
-                except ValueError:
-                    date_label = date_value
-
-                changes.append(
-                    f"{level_name} {date_label}: {old_label} → {new_label}"
-                )
-
-                if len(changes) >= 12:
-                    return changes
-
-            # A newly entering forecast day is only interesting when it
-            # contains a concrete snowfall amount.
-            for date_value in sorted(set(new_daily) - set(old_daily)):
-                amount = new_daily[date_value]
-                if not isinstance(amount, (int, float)) or amount <= 0:
-                    continue
-
-                try:
-                    dt = datetime.fromisoformat(date_value)
-                    date_label = f"{dt.day} {dt.strftime('%b')}"
-                except ValueError:
-                    date_label = date_value
-
-                changes.append(
-                    f"{level_name} {date_label}: — → {amount:g} cm"
-                )
-                if len(changes) >= 12:
-                    return changes
+            changes.append(
+                f"{level_name} · {int(current['elevation_m'])} m — "
+                f"Next snow: {old_label} → {new_label}"
+            )
 
         return changes
 
