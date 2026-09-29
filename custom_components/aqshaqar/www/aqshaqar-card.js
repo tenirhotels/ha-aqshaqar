@@ -77,8 +77,7 @@ class AqshaqarCard extends HTMLElement {
       <section class="station">
         <div class="station-head">
           <div>
-            <div class="station-name">${title}</div>
-            <div class="elevation">${elevation} m</div>
+            <div class="station-name">${title} (${elevation} m)</div>
           </div>
           <div class="next">${this._nextSnow(level)}</div>
         </div>
