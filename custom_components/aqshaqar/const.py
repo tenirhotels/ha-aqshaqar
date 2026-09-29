@@ -4,7 +4,7 @@ from __future__ import annotations
 
 DOMAIN = "aqshaqar"
 NAME = "Aqshaqar"
-VERSION = "0.4.0"
+VERSION = "0.4.2"
 
 RESORT = "Shymbulak"
 WEBSITE_URL = "http://tenirhotels.com/"
@@ -16,7 +16,7 @@ FALLBACK_RETRY_MINUTES = 10
 PARTIAL_RETRY_MINUTES = 10
 MIN_UPDATE_DELAY_SECONDS = 60
 REQUEST_TIMEOUT_SECONDS = 30
-SNAPSHOT_STORE_VERSION = 1
+SNAPSHOT_STORE_VERSION = 2
 
 
 HEADERS = {
