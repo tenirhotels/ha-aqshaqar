@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 
 from bs4 import BeautifulSoup
 
-from .const import EXPECTED_PERIODS, TIMEZONE
+from .const import TIMEZONE
 
 TZ = ZoneInfo(TIMEZONE)
 
@@ -236,16 +236,22 @@ def parse_level_html(level_key: str, config: dict[str, object], html: str) -> di
         "humidity": len(humidity),
     }
 
+    # Snow-Forecast can change the number of forecast periods. Do not hard-code
+    # the current number of periods; instead require all rows to have the same
+    # number of cells and use the parsed dates as the authoritative length.
+    expected_periods = len(dates)
     invalid = [
-        f"{name}={length}, expected {EXPECTED_PERIODS}"
+        f"{name}={length}, expected {expected_periods}"
         for name, length in lengths.items()
-        if length != EXPECTED_PERIODS
+        if length != expected_periods
     ]
+    if not expected_periods:
+        invalid.append("dates=0, expected at least 1")
     if invalid:
         raise ValueError("Invalid Snow-Forecast page: " + "; ".join(invalid))
 
     forecast = []
-    for i in range(EXPECTED_PERIODS):
+    for i in range(expected_periods):
         phrase = phrases[i]
         weather_value = weather[i]
         combined = " ".join(x for x in (phrase, weather_value) if x).lower()
@@ -278,7 +284,7 @@ def parse_level_html(level_key: str, config: dict[str, object], html: str) -> di
         "next_snow": parse_next_snow(soup),
         "forecast": forecast,
         "validation": {
-            "expected_periods": EXPECTED_PERIODS,
+            "expected_periods": expected_periods,
             "actual_periods": len(forecast),
             "row_lengths": lengths,
             "warnings": [],
