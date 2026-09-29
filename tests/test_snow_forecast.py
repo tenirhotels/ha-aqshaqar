@@ -8,7 +8,6 @@ from types import ModuleType
 
 import pytest
 
-
 _PACKAGE_PATH = Path(__file__).parents[1] / "custom_components" / "aqshaqar"
 _package = ModuleType("custom_components.aqshaqar")
 _package.__path__ = [str(_PACKAGE_PATH)]
