@@ -84,7 +84,6 @@ def _day_condition(periods: list[dict[str, Any]]) -> str:
         if "am" in period_name or "pm" in period_name:
             score += 1
 
-        # Prefer earlier daylight periods only when scores tie.
         score_key = score * 100 - index
         if score_key > best_score:
             best_score = score_key
@@ -125,9 +124,7 @@ class AqshaqarWeather(CoordinatorEntity[AqshaqarCoordinator], WeatherEntity):
 
         self._attr_unique_id = f"{DOMAIN}_{level_key}_weather"
         self._attr_name = f"{self._elevation} {self._level_name}"
-        self._attr_suggested_object_id = (
-            f"{DOMAIN}_{level_key}_{self._elevation}_m"
-        )
+        self._attr_suggested_object_id = f"{DOMAIN}_{level_key}_{self._elevation}_m"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, "shymbulak")},
             name=NAME,
@@ -142,8 +139,19 @@ class AqshaqarWeather(CoordinatorEntity[AqshaqarCoordinator], WeatherEntity):
 
     @property
     def _current(self) -> dict[str, Any] | None:
+        """Return the first forecast period belonging to the current local day."""
         forecast = self._level_data.get("forecast") or []
-        return forecast[0] if forecast else None
+        if not forecast:
+            return None
+
+        today = datetime.now(LOCAL_TZ).date().isoformat()
+        today_periods = [
+            period for period in forecast if str(period.get("date")) == today
+        ]
+        if today_periods:
+            return today_periods[0]
+
+        return forecast[0]
 
     @property
     def native_temperature(self) -> float | None:
@@ -253,13 +261,9 @@ class AqshaqarWeather(CoordinatorEntity[AqshaqarCoordinator], WeatherEntity):
                         if humidity_values
                         else None
                     ),
-                    "native_precipitation": (
-                        sum(rain_values) if rain_values else None
-                    ),
+                    "native_precipitation": sum(rain_values) if rain_values else None,
                     "native_wind_speed": max(wind_values) if wind_values else None,
-                    "wind_bearing": (
-                        (strongest_wind.get("wind") or {}).get("direction")
-                    ),
+                    "wind_bearing": (strongest_wind.get("wind") or {}).get("direction"),
                     "snow_cm": (
                         float(daily_snow[date_value])
                         if isinstance(daily_snow.get(date_value), (int, float))
