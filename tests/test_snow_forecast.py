@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import json
 import sys
 from pathlib import Path
@@ -13,10 +14,11 @@ _package = ModuleType("custom_components.aqshaqar")
 _package.__path__ = [str(_PACKAGE_PATH)]
 sys.modules.setdefault("custom_components.aqshaqar", _package)
 
-from custom_components.aqshaqar.snow_forecast import (  # noqa: E402
-    parse_level_html,
-    parse_page_times,
+_parser = importlib.import_module(
+    "custom_components.aqshaqar.snow_forecast"
 )
+parse_level_html = _parser.parse_level_html
+parse_page_times = _parser.parse_page_times
 
 
 def _cell(value: str | None = None, *, attrs: str = "") -> str:
