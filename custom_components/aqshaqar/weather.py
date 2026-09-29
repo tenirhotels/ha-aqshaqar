@@ -124,7 +124,7 @@ class AqshaqarWeather(CoordinatorEntity[AqshaqarCoordinator], WeatherEntity):
         self._elevation = int(level["elevation_m"])
 
         self._attr_unique_id = f"{DOMAIN}_{level_key}_weather"
-        self._attr_name = f"{self._level_name} ({self._elevation} m)"
+        self._attr_name = f"{self._elevation} {self._level_name}"
         self._attr_suggested_object_id = (
             f"{DOMAIN}_{level_key}_{self._elevation}_m"
         )
@@ -180,26 +180,11 @@ class AqshaqarWeather(CoordinatorEntity[AqshaqarCoordinator], WeatherEntity):
         value = (self._current or {}).get("rain_mm")
         return float(value) if isinstance(value, (int, float)) else None
 
-    @property
-    def extra_state_attributes(self) -> dict[str, Any]:
-        level = self._level_data
-        return {
-            "elevation_m": level.get("elevation_m"),
-            "issued_at": level.get("issued_at"),
-            "forecast_update_at": level.get("forecast_update_at"),
-            "next_snow": level.get("next_snow"),
-            "status": level.get("status"),
-            "last_error": level.get("last_error"),
-            "fetched_at": level.get("fetched_at"),
-            "daily_snow": level.get("daily_snow"),
-            "source": level.get("source"),
-        }
-
-    async def async_forecast_daily(self) -> list[Forecast] | None:
-        """Return one Home Assistant daily forecast item per calendar date."""
+    def _daily_forecast_attributes(self) -> list[dict[str, Any]]:
+        """Return daily weather and snowfall data for the custom card."""
         periods = self._level_data.get("forecast") or []
         if not periods:
-            return None
+            return []
 
         grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
         for period in periods:
@@ -207,7 +192,8 @@ class AqshaqarWeather(CoordinatorEntity[AqshaqarCoordinator], WeatherEntity):
             if date_value:
                 grouped[str(date_value)].append(period)
 
-        forecasts: list[Forecast] = []
+        daily_snow = self._level_data.get("daily_snow") or {}
+        result: list[dict[str, Any]] = []
 
         for date_value, day_periods in grouped.items():
             high_values = [
@@ -235,7 +221,6 @@ class AqshaqarWeather(CoordinatorEntity[AqshaqarCoordinator], WeatherEntity):
                 for p in day_periods
                 if isinstance((p.get("wind") or {}).get("speed_kmh"), (int, float))
             ]
-
             strongest_wind = max(
                 day_periods,
                 key=lambda p: (
@@ -245,8 +230,9 @@ class AqshaqarWeather(CoordinatorEntity[AqshaqarCoordinator], WeatherEntity):
                 ),
             )
 
-            forecasts.append(
+            result.append(
                 {
+                    "date": date_value,
                     "datetime": _day_datetime(date_value),
                     "condition": _day_condition(day_periods),
                     "native_temperature": max(high_values) if high_values else None,
@@ -263,10 +249,52 @@ class AqshaqarWeather(CoordinatorEntity[AqshaqarCoordinator], WeatherEntity):
                     "wind_bearing": (
                         (strongest_wind.get("wind") or {}).get("direction")
                     ),
+                    "snow_cm": (
+                        float(daily_snow[date_value])
+                        if isinstance(daily_snow.get(date_value), (int, float))
+                        else None
+                    ),
                 }
             )
 
-        return forecasts
+        return result
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Expose source data and daily weather/snowfall for Aqshaqar card."""
+        level = self._level_data
+        return {
+            "elevation_m": level.get("elevation_m"),
+            "issued_at": level.get("issued_at"),
+            "forecast_update_at": level.get("forecast_update_at"),
+            "next_snow": level.get("next_snow"),
+            "status": level.get("status"),
+            "last_error": level.get("last_error"),
+            "fetched_at": level.get("fetched_at"),
+            "daily_snow": level.get("daily_snow"),
+            "daily_forecast": self._daily_forecast_attributes(),
+            "source": level.get("source"),
+        }
+
+    async def async_forecast_daily(self) -> list[Forecast] | None:
+        """Return one Home Assistant daily forecast item per calendar date."""
+        daily = self._daily_forecast_attributes()
+        if not daily:
+            return None
+
+        return [
+            {
+                "datetime": item["datetime"],
+                "condition": item["condition"],
+                "native_temperature": item["native_temperature"],
+                "native_templow": item["native_templow"],
+                "humidity": item["humidity"],
+                "native_precipitation": item["native_precipitation"],
+                "native_wind_speed": item["native_wind_speed"],
+                "wind_bearing": item["wind_bearing"],
+            }
+            for item in daily
+        ]
 
 
 async def async_setup_entry(
