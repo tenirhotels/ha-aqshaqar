@@ -168,12 +168,51 @@ class AqshaqarCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             event.get("start"),
         )
 
+    @staticmethod
+    def _daily_snow(level: dict[str, Any] | None) -> dict[str, float | None]:
+        """Return explicit daily snowfall totals, including unknown days."""
+        if not level:
+            return {}
+
+        daily = level.get("daily_snow")
+        if isinstance(daily, list):
+            return {
+                str(item["date"]): item.get("snow_cm")
+                for item in daily
+                if isinstance(item, dict) and item.get("date")
+            }
+
+        result: dict[str, list[float]] = {}
+        dates: list[str] = []
+
+        for period in level.get("forecast") or []:
+            date_value = period.get("date")
+            if not date_value:
+                continue
+
+            date_value = str(date_value)
+            if date_value not in dates:
+                dates.append(date_value)
+
+            amount = period.get("snow_amount_cm")
+            if isinstance(amount, (int, float)):
+                result.setdefault(date_value, []).append(float(amount))
+
+        return {
+            date_value: (
+                round(sum(result[date_value]), 1)
+                if date_value in result
+                else None
+            )
+            for date_value in dates
+        }
+
     @classmethod
     def _snow_snapshot(
         cls,
         levels: dict[str, Any],
     ) -> dict[str, Any]:
-        """Persist only the stable Next snow data."""
+        """Persist Next snow and daily snowfall data for change detection."""
         return {
             "levels": {
                 key: {
@@ -181,18 +220,19 @@ class AqshaqarCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         "amount_cm": cls._next_snow_key(level)[0],
                         "start": cls._next_snow_key(level)[1],
                     },
+                    "daily_snow": cls._daily_snow(level),
                 }
                 for key, level in levels.items()
             }
         }
 
     @classmethod
-    def _forecast_changes(
+    def _next_snow_changes(
         cls,
         previous_levels: dict[str, Any],
         current_levels: dict[str, Any],
     ) -> list[str]:
-        """Report only changes to the explicit Snow-Forecast Next snow event."""
+        """Report only changes to the explicit Next snow event."""
         changes: list[str] = []
 
         for level_key, current in current_levels.items():
@@ -200,21 +240,89 @@ class AqshaqarCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if previous is None:
                 continue
 
-            old_amount, old_start = cls._next_snow_key(previous)
-            new_amount, new_start = cls._next_snow_key(current)
-
-            if (old_amount, old_start) == (new_amount, new_start):
+            if cls._next_snow_key(previous) == cls._next_snow_key(current):
                 continue
 
             level_name = str(current.get("name") or level_key.title())
-
-            old_label = cls._next_snow_label(previous)
-            new_label = cls._next_snow_label(current)
+            elevation = int(current["elevation_m"])
 
             changes.append(
-                f"{level_name} · {int(current['elevation_m'])} m — "
-                f"~~{old_label}~~ → {new_label}"
+                f"{level_name} · {elevation} m — "
+                f"~~{cls._next_snow_label(previous)}~~ → "
+                f"{cls._next_snow_label(current)}"
             )
+
+        return changes
+
+    @classmethod
+    def _forecast_changes(
+        cls,
+        previous_levels: dict[str, Any],
+        current_levels: dict[str, Any],
+    ) -> list[str]:
+        """Describe all meaningful snowfall forecast changes."""
+        changes: list[str] = []
+
+        for level_key, current in current_levels.items():
+            previous = previous_levels.get(level_key)
+            if previous is None:
+                continue
+
+            level_name = str(current.get("name") or level_key.title())
+            elevation = int(current["elevation_m"])
+
+            if cls._next_snow_key(previous) != cls._next_snow_key(current):
+                changes.append(
+                    f"{level_name} · {elevation} m — "
+                    f"Next snow: {cls._next_snow_label(previous)} → "
+                    f"{cls._next_snow_label(current)}"
+                )
+
+            old_daily = cls._daily_snow(previous)
+            new_daily = cls._daily_snow(current)
+
+            for date_value in sorted(set(old_daily) & set(new_daily)):
+                old_amount = old_daily[date_value]
+                new_amount = new_daily[date_value]
+                if old_amount == new_amount:
+                    continue
+                if old_amount is None and new_amount is None:
+                    continue
+
+                old_label = f"{old_amount:g} cm" if old_amount is not None else "—"
+                new_label = f"{new_amount:g} cm" if new_amount is not None else "—"
+
+                try:
+                    dt = datetime.fromisoformat(date_value)
+                    date_label = f"{dt.day} {dt.strftime('%b')}"
+                except ValueError:
+                    date_label = date_value
+
+                changes.append(
+                    f"{level_name} · {elevation} m — "
+                    f"Forecast · {date_label}: {old_label} → {new_label}"
+                )
+
+                if len(changes) >= 12:
+                    return changes
+
+            for date_value in sorted(set(new_daily) - set(old_daily)):
+                amount = new_daily[date_value]
+                if not isinstance(amount, (int, float)) or amount <= 0:
+                    continue
+
+                try:
+                    dt = datetime.fromisoformat(date_value)
+                    date_label = f"{dt.day} {dt.strftime('%b')}"
+                except ValueError:
+                    date_label = date_value
+
+                changes.append(
+                    f"{level_name} · {elevation} m — "
+                    f"Forecast · {date_label}: — → {amount:g} cm"
+                )
+                if len(changes) >= 12:
+                    return changes
 
         return changes
 
@@ -310,6 +418,10 @@ class AqshaqarCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             previous_snapshot.get("levels", {}),
             levels,
         )
+        next_snow_changes = self._next_snow_changes(
+            previous_snapshot.get("levels", {}),
+            levels,
+        )
         self._last_change = changes
 
         await self._persist_snapshot(current_snapshot)
@@ -340,6 +452,21 @@ class AqshaqarCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 },
             )
 
+        if next_snow_changes:
+            next_event_data = {
+                "resort": RESORT,
+                "changes": next_snow_changes,
+                "previous": previous_snapshot,
+                "current": current_snapshot,
+            }
+            if self._device_id:
+                next_event_data["device_id"] = self._device_id
+
+            self.hass.bus.async_fire(
+                "aqshaqar_next_snow_changed",
+                next_event_data,
+            )
+
         return {
             "app": NAME,
             "resort": RESORT,
@@ -351,6 +478,7 @@ class AqshaqarCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "errors": errors,
             "consecutive_failures": self._failure_count,
             "last_changes": changes,
+            "next_snow_changes": next_snow_changes,
             "device_id": self._device_id,
         }
 
@@ -369,6 +497,7 @@ class AqshaqarCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "fetched_at": (self.data or {}).get("fetched_at"),
             "consecutive_failures": self._failure_count,
             "last_changes": self._last_change,
+            "next_snow_changes": (self.data or {}).get("next_snow_changes", []),
             "snapshot_loaded": self._previous_snapshot is not None,
             "levels": {
                 key: {
