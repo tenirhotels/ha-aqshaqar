@@ -4,9 +4,9 @@ Home Assistant custom integration for live Snow-Forecast data from Shymbulak Ski
 
 Aqshaqar provides weather and snowfall data for three Shymbulak elevations:
 
-- **Base** — 2220 m
-- **Mid** — 2692 m
-- **Top** — 3163 m
+- **2220 Base**
+- **2692 Mid**
+- **3163 Top**
 
 ## Installation with HACS
 
@@ -166,16 +166,16 @@ type: custom:aqshaqar-card
 title: Shymbulak Snow
 ```
 
-The card is snowfall-first and shows Base, Mid and Top together.
+The card shows current weather, daily weather forecast, Daily snow and Next snow for 2220 Base, 2692 Mid and 3163 Top together.
 
 ## Device naming
 
 The intended presentation is:
 
 - **Aqshaqar**
-  - **Base (2220 m)**
-  - **Mid (2692 m)**
-  - **Top (3163 m)**
+  - **2220 Base**
+- **2692 Mid**
+- **3163 Top**
 
 This avoids duplicate names such as `Aqshaqar Base Base`.
 
