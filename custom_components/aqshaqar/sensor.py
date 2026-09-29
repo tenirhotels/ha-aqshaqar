@@ -5,50 +5,25 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from homeassistant.components.sensor import SensorEntity, SensorDeviceClass
+from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import EntityCategory
-from homeassistant.helpers.entity_registry import async_get as async_get_entity_registry
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DEVICE_ID, DOMAIN, NAME, RESORT, WEBSITE_URL
 from .coordinator import AqshaqarCoordinator
 
 
-def _snow_forecast_by_day(level: dict[str, Any]) -> list[dict[str, Any]]:
-    """Group explicit Snow-Forecast snowfall amounts by calendar day."""
-    grouped: dict[str, list[dict[str, Any]]] = {}
-
-    for period in level.get("forecast") or []:
-        date_value = period.get("date")
-        if not date_value:
-            continue
-        grouped.setdefault(str(date_value), []).append(period)
-
-    result: list[dict[str, Any]] = []
-    for date_value, periods in grouped.items():
-        snow_values = [
-            float(period["snow_amount_cm"])
-            for period in periods
-            if isinstance(period.get("snow_amount_cm"), (int, float))
-        ]
-        result.append(
-            {
-                "date": date_value,
-                "snow_cm": round(sum(snow_values), 1) if snow_values else None,
-                "snow_expected": any(
-                    period.get("snow_expected") is True for period in periods
-                ),
-            }
-        )
-
-    return result
+def _daily_snow(level: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return coordinator-normalized daily snowfall data."""
+    value = level.get("daily_snow")
+    return value if isinstance(value, list) else []
 
 
 def _format_snow_summary(level: dict[str, Any]) -> str:
-    """Return Snow-Forecast's explicit next-snow event first, then daily amounts."""
+    """Return the explicit next-snow event, then the first daily amount."""
     next_snow = level.get("next_snow") or {}
     amount = next_snow.get("amount_cm")
     start = next_snow.get("start")
@@ -60,8 +35,7 @@ def _format_snow_summary(level: dict[str, Any]) -> str:
         except ValueError:
             return f"❄ {amount:g} cm"
 
-    # Only use explicit snowfall amounts from the daily table.
-    for day in _snow_forecast_by_day(level):
+    for day in _daily_snow(level):
         amount = day.get("snow_cm")
         if isinstance(amount, (int, float)) and amount > 0:
             try:
@@ -74,54 +48,45 @@ def _format_snow_summary(level: dict[str, Any]) -> str:
     return "No snow expected"
 
 
+class AqshaqarBaseEntity(CoordinatorEntity[AqshaqarCoordinator]):
+    """Common entity implementation for Aqshaqar."""
+
+    _attr_has_entity_name = True
+
+    def _level_data(self, level_key: str) -> dict[str, Any]:
+        """Return normalized level data."""
+        return self.coordinator.data.get("levels", {}).get(level_key, {})
+
+    @property
+    def _device_info(self) -> DeviceInfo:
+        """Return the shared Aqshaqar device information."""
+        return DeviceInfo(
+            identifiers={(DOMAIN, DEVICE_ID)},
+            name=NAME,
+            manufacturer="Tenir Shymbulak",
+            model=f"{RESORT} Snow Forecast",
+            configuration_url=WEBSITE_URL,
+        )
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
     async_add_entities,
 ) -> None:
-    """Set up only snowfall and one common diagnostic update sensor."""
+    """Set up snowfall sensors and one shared diagnostic sensor."""
     coordinator: AqshaqarCoordinator = hass.data[DOMAIN][entry.entry_id]
-
-    # Remove legacy Aqshaqar sensors so the device stays focused on snowfall.
-    registry = async_get_entity_registry(hass)
-    legacy_prefixes = (
-        "_conditions",
-        "_temp_max_c",
-        "_temp_min_c",
-        "_chill_c",
-        "_humidity_pct",
-        "_wind_speed_kmh",
-        "_rain_mm",
-        "_snow_amount_cm",
-        "_freezing_level_m",
-        "_next_snow",
-        "_forecast_update_at",
-    )
-    for entity in list(registry.entities.values()):
-        if (
-            entity.config_entry_id == entry.entry_id
-            and entity.platform == DOMAIN
-            and any(entity.unique_id == f"{DOMAIN}_{level}{suffix}"
-                    for level in ("base", "mid", "top")
-                    for suffix in legacy_prefixes)
-        ):
-            registry.async_remove(entity.entity_id)
 
     entities: list[SensorEntity] = [
         AqshaqarSnowSensor(coordinator, level_key, level)
         for level_key, level in coordinator.data["levels"].items()
     ]
     entities.append(AqshaqarUpdateSensor(coordinator))
-
     async_add_entities(entities)
 
 
-class AqshaqarSnowSensor(
-    CoordinatorEntity[AqshaqarCoordinator], SensorEntity
-):
+class AqshaqarSnowSensor(AqshaqarBaseEntity, SensorEntity):
     """One snowfall forecast sensor per Shymbulak elevation."""
-
-    _attr_has_entity_name = True
 
     def __init__(
         self,
@@ -138,41 +103,32 @@ class AqshaqarSnowSensor(
         self._attr_suggested_object_id = f"{DOMAIN}_{level_key}_snow_forecast"
         self._attr_name = f"{self._level_name} Snow forecast"
         self._attr_icon = "mdi:snowflake-variant"
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, DEVICE_ID)},
-            name=NAME,
-            manufacturer="Tenir Shymbulak",
-            model=f"{RESORT} Snow Forecast",
-            configuration_url=WEBSITE_URL,
-        )
-
-    @property
-    def _level_data(self) -> dict[str, Any]:
-        return self.coordinator.data["levels"].get(self._level_key, {})
+        self._attr_device_info = self._device_info
 
     @property
     def native_value(self) -> str:
-        return _format_snow_summary(self._level_data)
+        """Return the next meaningful snowfall summary."""
+        return _format_snow_summary(self._level_data(self._level_key))
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        level = self._level_data
+        """Expose normalized forecast and source health."""
+        level = self._level_data(self._level_key)
         return {
             "level": self._level_name,
             "elevation_m": self._elevation,
+            "status": level.get("status"),
+            "last_error": level.get("last_error"),
+            "fetched_at": level.get("fetched_at"),
+            "source_update_at": level.get("forecast_update_at"),
             "next_snow": level.get("next_snow"),
-            "forecast_update_at": self.coordinator.data.get("next_update_at"),
-            "forecast": _snow_forecast_by_day(level),
+            "forecast": _daily_snow(level),
             "source": level.get("source"),
         }
 
 
-class AqshaqarUpdateSensor(
-    CoordinatorEntity[AqshaqarCoordinator], SensorEntity
-):
+class AqshaqarUpdateSensor(AqshaqarBaseEntity, SensorEntity):
     """One common next-update diagnostic sensor for all elevations."""
-
-    _attr_has_entity_name = True
 
     def __init__(self, coordinator: AqshaqarCoordinator) -> None:
         super().__init__(coordinator)
@@ -182,26 +138,21 @@ class AqshaqarUpdateSensor(
         self._attr_device_class = SensorDeviceClass.TIMESTAMP
         self._attr_entity_category = EntityCategory.DIAGNOSTIC
         self._attr_icon = "mdi:update"
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, DEVICE_ID)},
-            name=NAME,
-            manufacturer="Tenir Shymbulak",
-            model=f"{RESORT} Snow Forecast",
-            configuration_url=WEBSITE_URL,
-        )
+        self._attr_device_info = self._device_info
 
     @property
     def native_value(self) -> datetime | None:
+        """Return the shared next poll time."""
         value = self.coordinator.data.get("next_update_at")
         if not value:
             return None
+
         try:
             return datetime.fromisoformat(str(value))
         except ValueError:
             return None
 
-
     @callback
     def _handle_coordinator_update(self) -> None:
-        """Refresh the state from coordinator data."""
+        """Refresh the diagnostic state."""
         self.async_write_ha_state()
