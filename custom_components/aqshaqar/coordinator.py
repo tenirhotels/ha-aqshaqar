@@ -8,7 +8,7 @@ from copy import deepcopy
 from datetime import datetime, timedelta
 from typing import Any
 
-from aiohttp import ClientError, ClientResponseError, ClientTimeout
+from aiohttp import ClientError, ClientTimeout
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.storage import Store
