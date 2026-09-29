@@ -76,9 +76,9 @@ Weather:
 
 Snow:
 
-- `sensor.aqshaqar_base_snow_forecast`
-- `sensor.aqshaqar_mid_snow_forecast`
-- `sensor.aqshaqar_top_snow_forecast`
+- `sensor.aqshaqar_base_forecast`
+- `sensor.aqshaqar_mid_forecast`
+- `sensor.aqshaqar_top_forecast`
 
 Diagnostics:
 
