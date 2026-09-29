@@ -64,7 +64,6 @@ def make_html(
     snow_values[4] = '<span class="snow-amount" data-value="1">1 cm</span>'
     snow_values[5] = '<span class="snow-amount" data-value="2">2 cm</span>'
 
-    weather = ["rain"] * periods
     phrases = ["Rain showers"] * periods
     wind = [
         '<span class="wind-icon" data-speed="5"><span class="wind-icon__tooltip">N</span></span>'
