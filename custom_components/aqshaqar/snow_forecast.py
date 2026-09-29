@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -20,6 +20,16 @@ BLOCK_MARKERS = (
     "access denied",
     "attention required",
 )
+
+WEEKDAYS = {
+    "mon": 0,
+    "tue": 1,
+    "wed": 2,
+    "thu": 3,
+    "fri": 4,
+    "sat": 5,
+    "sun": 6,
+}
 
 
 def parse_number(value: Any) -> int | float | None:
@@ -174,8 +184,30 @@ def parse_wind(soup: BeautifulSoup) -> list[dict[str, Any] | None]:
     return result
 
 
-def parse_next_snow(soup: BeautifulSoup) -> dict[str, Any] | None:
+def _next_date_from_source_label(
+    weekday: str,
+    day: int,
+    reference: datetime | None,
+) -> str | None:
+    """Resolve Snow-Forecast's 'Mon 5th' label without inventing a time."""
+    weekday_number = WEEKDAYS.get(weekday[:3].lower())
+    if weekday_number is None or not 1 <= day <= 31:
+        return None
+
+    base = (reference or datetime.now(TZ)).date()
+    for offset in range(0, 370):
+        candidate = base + timedelta(days=offset)
+        if candidate.day == day and candidate.weekday() == weekday_number:
+            return candidate.isoformat()
+    return None
+
+
+def parse_next_snow(
+    soup: BeautifulSoup,
+    reference: datetime | None = None,
+) -> dict[str, Any] | None:
     """Parse Snow-Forecast's explicit 'Next snow in Shymbulak' event."""
+    # Preferred source: Snow-Forecast's structured Event JSON-LD.
     for script in soup.select('script[type="application/ld+json"]'):
         raw = script.string or script.get_text()
         if not raw:
@@ -196,16 +228,13 @@ def parse_next_snow(soup: BeautifulSoup) -> dict[str, Any] | None:
                 continue
 
             event = accepted.get("about")
-            if not isinstance(event, dict):
-                continue
-            if event.get("@type") != "Event":
+            if not isinstance(event, dict) or event.get("@type") != "Event":
                 continue
             if event.get("name") != "Next snow in Shymbulak:":
                 continue
 
             amount = None
             additional = event.get("additionalProperty")
-
             properties = (
                 additional
                 if isinstance(additional, list)
@@ -215,30 +244,41 @@ def parse_next_snow(soup: BeautifulSoup) -> dict[str, Any] | None:
             )
 
             for prop in properties:
-                if (
-                    isinstance(prop, dict)
-                    and prop.get("name") == "snowfall"
-                ):
+                if isinstance(prop, dict) and prop.get("name") == "snowfall":
                     amount = parse_number(prop.get("value"))
                     break
 
             return {
                 "amount_cm": amount,
                 "start": event.get("startDate"),
+                "source": "snow_forecast_jsonld",
                 "description": event.get("description"),
             }
 
-    # Conservative fallback for a layout that exposes the value in HTML.
-    node = soup.select_one(".next-snow")
-    if node:
-        amount_node = node.select_one(".next-snow__snow")
-        amount = parse_number(cell_text(amount_node)) if amount_node else None
-        if amount is not None:
-            return {
-                "amount_cm": amount,
-                "start": None,
-                "description": cell_text(node),
-            }
+    # Fallback: parse the exact visible source sentence. This is preferable
+    # to deriving Next snow from hourly/daily forecast cells because the site
+    # publishes Next snow as a separate source value.
+    text = soup.get_text(" ", strip=True)
+    match = re.search(
+        r"Next\s+snow\s+in\s+Shymbulak\s*:\s*"
+        r"([0-9]+(?:[.,][0-9]+)?)\s*cm\s+on\s+"
+        r"(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+(\d{1,2})(?:st|nd|rd|th)?",
+        text,
+        flags=re.IGNORECASE,
+    )
+    if match:
+        amount = parse_number(match.group(1))
+        weekday = match.group(2)
+        day = int(match.group(3))
+        source_date = _next_date_from_source_label(weekday, day, reference)
+        return {
+            "amount_cm": amount,
+            "start": None,
+            "source_date": source_date,
+            "source_label": f"{weekday} {day}",
+            "source": "snow_forecast_visible",
+            "description": match.group(0),
+        }
 
     return None
 
@@ -382,6 +422,13 @@ def parse_level_html(
             )
 
     timing = parse_page_times(html)
+    reference = None
+    if timing["server_time"]:
+        try:
+            reference = datetime.fromisoformat(str(timing["server_time"]))
+        except ValueError:
+            reference = None
+
     forecast: list[dict[str, Any]] = []
 
     for index in range(forecast_length):
@@ -413,6 +460,8 @@ def parse_level_html(
         )
 
     finished = datetime.now(TZ)
+    next_snow = parse_next_snow(soup, reference)
+
     return {
         "name": config["name"],
         "elevation_m": config["elevation_m"],
@@ -422,7 +471,7 @@ def parse_level_html(
         "forecast_update_at": timing["forecast_update_at"],
         "update_in_seconds": timing["update_in_seconds"],
         "schedule_source": timing["schedule_source"],
-        "next_snow": parse_next_snow(soup),
+        "next_snow": next_snow,
         "forecast": forecast,
         "daily_snow": _daily_snow_from_forecast(forecast),
         "status": "ok",
@@ -433,6 +482,8 @@ def parse_level_html(
                 name: len(values)
                 for name, values in rows.items()
             },
+            "next_snow_source": next_snow.get("source") if next_snow else None,
+            "next_snow_amount_cm": next_snow.get("amount_cm") if next_snow else None,
             "warnings": warnings,
         },
         "duration_seconds": round(
