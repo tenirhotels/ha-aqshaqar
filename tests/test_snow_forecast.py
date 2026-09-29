@@ -1,10 +1,19 @@
 from __future__ import annotations
 
 import json
+import sys
+from pathlib import Path
+from types import ModuleType
 
 import pytest
 
-from custom_components.aqshaqar.snow_forecast import (
+
+_PACKAGE_PATH = Path(__file__).parents[1] / "custom_components" / "aqshaqar"
+_package = ModuleType("custom_components.aqshaqar")
+_package.__path__ = [str(_PACKAGE_PATH)]
+sys.modules.setdefault("custom_components.aqshaqar", _package)
+
+from custom_components.aqshaqar.snow_forecast import (  # noqa: E402
     parse_level_html,
     parse_page_times,
 )
