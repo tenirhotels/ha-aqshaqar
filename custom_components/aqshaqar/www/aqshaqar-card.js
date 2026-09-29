@@ -1,4 +1,4 @@
-/* Aqshaqar Lovelace card - weather and snowfall. */
+/* Aqshaqar Lovelace card - responsive weather and snowfall. */
 
 class AqshaqarCard extends HTMLElement {
   setConfig(config) {
@@ -12,7 +12,7 @@ class AqshaqarCard extends HTMLElement {
   }
 
   getCardSize() {
-    return 10;
+    return 12;
   }
 
   static getStubConfig() {
@@ -20,18 +20,12 @@ class AqshaqarCard extends HTMLElement {
   }
 
   _weather(level, elevation) {
-    return this._hass?.states?.[
-      `weather.aqshaqar_${level}_${elevation}_m`
-    ] || null;
+    return this._hass?.states?.[`weather.aqshaqar_${level}_${elevation}_m`] || null;
   }
 
   _snow(level) {
     const states = this._hass?.states || {};
-    return (
-      states[`sensor.aqshaqar_${level}_forecast`] ||
-      states[`sensor.aqshaqar_${level}_snow_forecast`] ||
-      null
-    );
+    return states[`sensor.aqshaqar_${level}_forecast`] || null;
   }
 
   _conditionIcon(condition) {
@@ -59,7 +53,7 @@ class AqshaqarCard extends HTMLElement {
       fog: "Fog",
       rainy: "Rainy",
       snowy: "Snowy",
-      "snowy-rainy": "Snow and rain",
+      "snowy-rainy": "Snow + rain",
       "lightning-rainy": "Thunderstorm",
       windy: "Windy",
     };
@@ -73,9 +67,7 @@ class AqshaqarCard extends HTMLElement {
 
   _formatSnow(value) {
     if (typeof value !== "number") return "—";
-    return `❄ ${Number(value).toLocaleString([], {
-      maximumFractionDigits: 1,
-    })} cm`;
+    return `❄ ${Number(value).toLocaleString([], { maximumFractionDigits: 1 })} cm`;
   }
 
   _formatDate(value) {
@@ -91,36 +83,25 @@ class AqshaqarCard extends HTMLElement {
 
   _nextSnow(level) {
     const state = this._snow(level);
-    if (!state) return "—";
+    const next = state?.attributes?.next_snow;
+    if (!next?.amount_cm || !next?.start) return "—";
 
-    const next = state.attributes?.next_snow;
-    if (next?.amount_cm != null && next?.start) {
-      const d = new Date(next.start);
-      if (!Number.isNaN(d.getTime())) {
-        return `❄ ${Number(next.amount_cm).toLocaleString([], {
-          maximumFractionDigits: 1,
-        })} cm · ${d.toLocaleDateString([], {
-          day: "numeric",
-          month: "short",
-        })}, ${d.toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-        })}`;
-      }
-    }
+    const d = new Date(next.start);
+    if (Number.isNaN(d.getTime())) return `❄ ${Number(next.amount_cm).toLocaleString([], { maximumFractionDigits: 1 })} cm`;
 
-    return "—";
+    return `❄ ${Number(next.amount_cm).toLocaleString([], { maximumFractionDigits: 1 })} cm · ${d.toLocaleDateString([], {
+      day: "numeric",
+      month: "short",
+    })}`;
   }
 
   _dailyForecast(level, elevation) {
-    const weather = this._weather(level, elevation);
-    return weather?.attributes?.daily_forecast || [];
+    return this._weather(level, elevation)?.attributes?.daily_forecast || [];
   }
 
   _station(level, title, elevation) {
     const weather = this._weather(level, elevation);
     const days = this._dailyForecast(level, elevation);
-
     const currentCondition = weather?.state || "cloudy";
     const currentTemp = weather?.attributes?.temperature;
     const humidity = weather?.attributes?.humidity;
@@ -131,16 +112,16 @@ class AqshaqarCard extends HTMLElement {
     return `
       <section class="station">
         <div class="station-head">
-          <div>
+          <div class="station-main">
             <div class="station-name">${elevation} ${title}</div>
             <div class="current">
-              <ha-icon icon="${this._conditionIcon(currentCondition)}"></ha-icon>
+              <ha-icon class="current-icon" icon="${this._conditionIcon(currentCondition)}"></ha-icon>
               <span class="current-temp">${this._formatTemp(currentTemp)}</span>
               <span class="condition">${this._conditionLabel(currentCondition)}</span>
             </div>
             <div class="details">
-              ${humidity != null ? `Humidity ${Math.round(humidity)}%` : ""}
-              ${windSpeed != null ? ` · Wind ${Math.round(windSpeed)} km/h${windBearing ? ` (${windBearing})` : ""}` : ""}
+              ${humidity != null ? `<span>Humidity ${Math.round(humidity)}%</span>` : ""}
+              ${windSpeed != null ? `<span>Wind ${Math.round(windSpeed)} km/h${windBearing ? ` ${windBearing}` : ""}</span>` : ""}
             </div>
           </div>
           <div class="next">
@@ -149,7 +130,7 @@ class AqshaqarCard extends HTMLElement {
           </div>
         </div>
 
-        <div class="label">Daily forecast · Daily snow</div>
+        <div class="label">Daily forecast</div>
         <div class="days">
           ${days.map(day => `
             <div class="day">
@@ -159,7 +140,7 @@ class AqshaqarCard extends HTMLElement {
                 <span class="high">${this._formatTemp(day.native_temperature)}</span>
                 <span class="low">${this._formatTemp(day.native_templow)}</span>
               </div>
-              <div class="condition">${this._conditionLabel(day.condition)}</div>
+              <div class="day-condition">${this._conditionLabel(day.condition)}</div>
               <div class="snow">${this._formatSnow(day.snow_cm)}</div>
             </div>
           `).join("")}
@@ -178,9 +159,7 @@ class AqshaqarCard extends HTMLElement {
       ["top", "Top", 3163],
     ];
 
-    const updateState =
-      this._hass.states?.["sensor.aqshaqar_forecast_update"] ||
-      this._hass.states?.["sensor.forecast_update"];
+    const updateState = this._hass.states?.["sensor.aqshaqar_forecast_update"];
     const update = updateState?.state;
 
     this.shadowRoot.innerHTML = `
@@ -188,98 +167,48 @@ class AqshaqarCard extends HTMLElement {
         :host { display:block; }
         ha-card { overflow:hidden; }
         .wrap { padding:16px; }
-        .title { font-size:22px; font-weight:700; }
-        .subtitle { color:var(--secondary-text-color); font-size:12px; margin-top:3px; }
-        .top { display:flex; justify-content:space-between; gap:16px; margin-bottom:14px; }
-        .update { color:var(--secondary-text-color); font-size:11px; text-align:right; }
-        .stations { display:grid; grid-template-columns:1fr; gap:12px; }
-        .station {
-          border:1px solid var(--divider-color);
-          border-radius:18px;
-          padding:14px;
-          background:var(--card-background-color);
+        .top { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:14px; }
+        .title { font-size:22px; font-weight:700; line-height:1.2; }
+        .subtitle { color:var(--secondary-text-color); font-size:12px; margin-top:4px; }
+        .update { color:var(--secondary-text-color); font-size:11px; line-height:1.4; text-align:right; white-space:nowrap; }
+        .stations { display:flex; flex-direction:column; gap:12px; }
+        .station { border:1px solid var(--divider-color); border-radius:18px; padding:14px; background:var(--card-background-color); min-width:0; }
+        .station-head { display:flex; align-items:flex-start; justify-content:space-between; gap:20px; }
+        .station-main { min-width:0; }
+        .station-name { font-size:18px; font-weight:700; line-height:1.2; }
+        .current { margin-top:7px; display:flex; align-items:center; gap:8px; min-width:0; }
+        .current-icon { width:24px; height:24px; flex:0 0 24px; }
+        .current-temp { font-size:28px; font-weight:700; line-height:1; }
+        .condition { font-size:12px; color:var(--secondary-text-color); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .details { display:flex; flex-wrap:wrap; gap:6px 12px; margin-top:7px; font-size:11px; color:var(--secondary-text-color); }
+        .next { flex:0 0 auto; min-width:160px; max-width:42%; text-align:right; }
+        .next-label { font-size:11px; color:var(--secondary-text-color); margin-bottom:4px; }
+        .next-value { font-size:15px; font-weight:700; color:var(--primary-color); white-space:nowrap; }
+        .label { margin-top:15px; margin-bottom:8px; font-size:12px; color:var(--secondary-text-color); }
+        .days { display:grid; grid-template-columns:repeat(6, minmax(0, 1fr)); gap:7px; min-width:0; }
+        .day { min-width:0; padding:9px 5px; border-radius:12px; background:var(--primary-background-color); text-align:center; overflow:hidden; }
+        .date { font-size:11px; color:var(--secondary-text-color); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .day-icon { display:block; width:22px; height:22px; margin:7px auto 4px; }
+        .temps { display:flex; justify-content:center; align-items:baseline; gap:5px; font-size:15px; font-weight:700; }
+        .low { color:var(--secondary-text-color); font-weight:500; }
+        .day-condition { margin-top:4px; min-height:28px; font-size:10px; line-height:1.25; color:var(--secondary-text-color); display:flex; align-items:flex-start; justify-content:center; }
+        .snow { margin-top:6px; min-height:17px; font-size:11px; font-weight:700; color:var(--primary-color); line-height:1.3; white-space:nowrap; }
+        @media (max-width: 700px) {
+          .wrap { padding:12px; }
+          .top { gap:10px; }
+          .title { font-size:19px; }
+          .station-head { gap:12px; }
+          .next { min-width:130px; }
+          .days { grid-template-columns:repeat(6, minmax(72px, 1fr)); overflow-x:auto; padding-bottom:2px; }
+          .day { min-width:72px; }
         }
-        .station-head {
-          display:flex;
-          align-items:flex-start;
-          justify-content:space-between;
-          gap:16px;
-        }
-        .station-name { font-size:18px; font-weight:700; }
-        .current {
-          margin-top:7px;
-          display:flex;
-          align-items:center;
-          gap:7px;
-        }
-        .current ha-icon { width:22px; height:22px; }
-        .current-temp { font-size:25px; font-weight:700; }
-        .condition { font-size:11px; color:var(--secondary-text-color); }
-        .details { margin-top:4px; font-size:11px; color:var(--secondary-text-color); }
-        .next { min-width:190px; text-align:right; }
-        .next-label {
-          font-size:11px;
-          color:var(--secondary-text-color);
-          margin-bottom:4px;
-        }
-        .next-value { font-size:16px; font-weight:700; color:var(--primary-color); }
-        .label {
-          margin-top:14px;
-          margin-bottom:8px;
-          font-size:12px;
-          color:var(--secondary-text-color);
-        }
-        .days {
-          display:grid;
-          grid-template-columns:repeat(6, minmax(90px, 1fr));
-          gap:7px;
-          overflow-x:auto;
-        }
-        .day {
-          min-width:90px;
-          padding:9px 7px;
-          border-radius:12px;
-          background:var(--primary-background-color);
-          text-align:center;
-        }
-        .date {
-          font-size:11px;
-          color:var(--secondary-text-color);
-          white-space:nowrap;
-        }
-        .day-icon {
-          display:block;
-          width:22px;
-          height:22px;
-          margin:7px auto 3px;
-        }
-        .temps {
-          display:flex;
-          justify-content:center;
-          gap:5px;
-          font-size:14px;
-          font-weight:700;
-        }
-        .low {
-          color:var(--secondary-text-color);
-          font-weight:500;
-        }
-        .snow {
-          margin-top:7px;
-          min-height:18px;
-          font-size:12px;
-          font-weight:700;
-          color:var(--primary-color);
-          line-height:1.3;
-        }
-        @media (min-width: 1000px) {
-          .stations { grid-template-columns:repeat(3, minmax(0, 1fr)); }
-          .days { grid-template-columns:repeat(6, minmax(68px, 1fr)); overflow-x:hidden; }
-          .next { min-width:0; max-width:45%; }
-        }
-        @media (max-width: 599px) {
+        @media (max-width: 480px) {
+          .top { flex-direction:column; }
+          .update { text-align:left; }
           .station-head { flex-direction:column; }
-          .next { min-width:0; text-align:left; }
+          .next { max-width:none; min-width:0; text-align:left; }
+          .next-value { white-space:normal; }
+          .days { grid-template-columns:repeat(6, 78px); }
         }
       </style>
       <ha-card>
@@ -307,7 +236,7 @@ if (!window.customCards.some(card => card.type === "aqshaqar-card")) {
   window.customCards.push({
     type: "aqshaqar-card",
     name: "Aqshaqar",
-    description: "Weather and daily snowfall forecast by Shymbulak elevation.",
+    description: "Responsive weather and daily snowfall forecast by Shymbulak elevation.",
     preview: true,
   });
 }
