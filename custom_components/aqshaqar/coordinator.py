@@ -309,9 +309,9 @@ class AqshaqarCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         snapshot: dict[str, Any],
     ) -> None:
         """Persist the stable snowfall snapshot."""
+        self._previous_snapshot = deepcopy(snapshot)
         try:
             await self._snapshot_store.async_save(snapshot)
-            self._previous_snapshot = deepcopy(snapshot)
         except Exception as err:
             _LOGGER.warning("Unable to persist Aqshaqar snow snapshot: %s", err)
 
