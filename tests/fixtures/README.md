@@ -1,0 +1,1 @@
+Fixtures in this directory document the expected Snow-Forecast table shape. The parser tests use compact generated fixtures so they remain readable and do not depend on live site HTML.
