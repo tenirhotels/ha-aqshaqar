@@ -192,7 +192,18 @@ class AqshaqarWeather(CoordinatorEntity[AqshaqarCoordinator], WeatherEntity):
             if date_value:
                 grouped[str(date_value)].append(period)
 
-        daily_snow = self._level_data.get("daily_snow") or {}
+        daily_snow_raw = self._level_data.get("daily_snow") or []
+        if isinstance(daily_snow_raw, list):
+            daily_snow = {
+                str(item["date"]): item.get("snow_cm")
+                for item in daily_snow_raw
+                if isinstance(item, dict) and item.get("date")
+            }
+        elif isinstance(daily_snow_raw, dict):
+            daily_snow = daily_snow_raw
+        else:
+            daily_snow = {}
+
         result: list[dict[str, Any]] = []
 
         for date_value, day_periods in grouped.items():
