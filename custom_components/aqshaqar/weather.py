@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import datetime, time, timezone
+from datetime import UTC, datetime, time
 from typing import Any
+from zoneinfo import ZoneInfo
 
-from homeassistant.components.weather import Forecast, WeatherEntity, WeatherEntityFeature
+from homeassistant.components.weather import (
+    Forecast,
+    WeatherEntity,
+    WeatherEntityFeature,
+)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfTemperature
 from homeassistant.core import HomeAssistant
@@ -15,8 +20,6 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN, NAME, RESORT, TIMEZONE, WEBSITE_URL
 from .coordinator import AqshaqarCoordinator
-
-from zoneinfo import ZoneInfo
 
 LOCAL_TZ = ZoneInfo(TIMEZONE)
 
@@ -97,7 +100,7 @@ def _day_datetime(date_value: str) -> str:
         time(hour=12),
         tzinfo=LOCAL_TZ,
     )
-    return local_dt.astimezone(timezone.utc).isoformat()
+    return local_dt.astimezone(UTC).isoformat()
 
 
 class AqshaqarWeather(CoordinatorEntity[AqshaqarCoordinator], WeatherEntity):
