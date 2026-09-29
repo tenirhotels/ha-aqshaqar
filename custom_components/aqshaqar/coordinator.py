@@ -4,13 +4,18 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from copy import deepcopy
 from datetime import datetime, timedelta
 from typing import Any
 
 from aiohttp import ClientError, ClientTimeout
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.helpers.storage import Store
+from homeassistant.helpers.update_coordinator import (
+    DataUpdateCoordinator,
+    UpdateFailed,
+)
 
 from .const import (
     FALLBACK_RETRY_MINUTES,
@@ -18,37 +23,79 @@ from .const import (
     LEVELS,
     MIN_UPDATE_DELAY_SECONDS,
     NAME,
+    PARTIAL_RETRY_MINUTES,
     REQUEST_TIMEOUT_SECONDS,
     RESORT,
+    SNAPSHOT_STORE_VERSION,
 )
 from .snow_forecast import parse_level_html
 
 _LOGGER = logging.getLogger(__package__)
+
 FALLBACK_RETRY_SECONDS = FALLBACK_RETRY_MINUTES * 60
+PARTIAL_RETRY_SECONDS = PARTIAL_RETRY_MINUTES * 60
+BACKOFF_SECONDS = (120, 300, 600, 1200, 1800, 3600)
 
 
 class AqshaqarCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Coordinate one poll for all Shymbulak elevations."""
 
-    def __init__(self, hass: HomeAssistant) -> None:
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        entry_id: str,
+    ) -> None:
         """Initialize the coordinator."""
         self._session = async_get_clientsession(hass)
         self._level_configs = LEVELS
-        initial_interval = timedelta(seconds=FALLBACK_RETRY_SECONDS)
+        self._entry_id = entry_id
+        self._device_id: str | None = None
+        self._failure_count = 0
+        self._last_change: list[str] = []
+        self._snapshot_store = Store(
+            hass,
+            SNAPSHOT_STORE_VERSION,
+            f"aqshaqar_{entry_id}_snow_snapshot",
+        )
+        self._previous_snapshot: dict[str, Any] | None = None
 
         super().__init__(
             hass,
             logger=_LOGGER,
             name=f"{NAME} {RESORT}",
-            update_interval=initial_interval,
+            update_interval=timedelta(seconds=FALLBACK_RETRY_SECONDS),
+            always_update=True,
         )
 
+    async def async_initialize(self) -> None:
+        """Load the last successful snowfall snapshot from HA storage."""
+        stored = await self._snapshot_store.async_load()
+        if isinstance(stored, dict):
+            self._previous_snapshot = stored
+
+    def set_device_id(self, device_id: str) -> None:
+        """Store the real Home Assistant device registry id for events."""
+        self._device_id = device_id
+
+    @property
+    def consecutive_failures(self) -> int:
+        """Return the current complete-fetch failure count."""
+        return self._failure_count
+
+    @property
+    def last_changes(self) -> list[str]:
+        """Return changes from the most recent successful refresh."""
+        return list(self._last_change)
+
     async def _fetch_level(
-        self, level_key: str, config: dict[str, object]
+        self,
+        level_key: str,
+        config: dict[str, object],
     ) -> dict[str, Any]:
         """Download and parse one elevation."""
+        timeout = ClientTimeout(total=REQUEST_TIMEOUT_SECONDS)
+
         try:
-            timeout = ClientTimeout(total=REQUEST_TIMEOUT_SECONDS)
             async with self._session.get(
                 str(config["url"]),
                 headers=HEADERS,
@@ -60,7 +107,9 @@ class AqshaqarCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     raise UpdateFailed(
                         f"{level_key}: HTTP {response.status}: {body}"
                     )
+
                 html = await response.text()
+
         except (ClientError, asyncio.TimeoutError, UpdateFailed) as err:
             raise UpdateFailed(f"{level_key}: {err}") from err
 
@@ -76,14 +125,12 @@ class AqshaqarCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     @staticmethod
     def _next_update_seconds(levels: dict[str, Any]) -> int:
-        """Return the earliest next forecast update reported by Snow-Forecast."""
-        candidates: list[int] = []
-
-        for level in levels.values():
-            value = level.get("update_in_seconds")
-            if isinstance(value, (int, float)):
-                candidates.append(max(0, int(value)))
-
+        """Use the earliest source-reported update interval."""
+        candidates = [
+            int(level["update_in_seconds"])
+            for level in levels.values()
+            if isinstance(level.get("update_in_seconds"), (int, float))
+        ]
         if not candidates:
             return FALLBACK_RETRY_SECONDS
 
@@ -110,21 +157,57 @@ class AqshaqarCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     @staticmethod
     def _daily_snow(level: dict[str, Any] | None) -> dict[str, float | None]:
-        """Return explicit daily snowfall totals from Snow-Forecast periods."""
+        """Return explicit daily snowfall totals, including unknown days."""
         if not level:
             return {}
 
-        grouped: dict[str, list[float]] = {}
+        daily = level.get("daily_snow")
+        if isinstance(daily, list):
+            return {
+                str(item["date"]): item.get("snow_cm")
+                for item in daily
+                if isinstance(item, dict) and item.get("date")
+            }
+
+        result: dict[str, list[float]] = {}
+        dates: list[str] = []
+
         for period in level.get("forecast") or []:
             date_value = period.get("date")
-            amount = period.get("snow_amount_cm")
-            if not date_value or not isinstance(amount, (int, float)):
+            if not date_value:
                 continue
-            grouped.setdefault(str(date_value), []).append(float(amount))
+
+            date_value = str(date_value)
+            if date_value not in dates:
+                dates.append(date_value)
+
+            amount = period.get("snow_amount_cm")
+            if isinstance(amount, (int, float)):
+                result.setdefault(date_value, []).append(float(amount))
 
         return {
-            date_value: round(sum(values), 1)
-            for date_value, values in grouped.items()
+            date_value: (
+                round(sum(result[date_value]), 1)
+                if date_value in result
+                else None
+            )
+            for date_value in dates
+        }
+
+    @classmethod
+    def _snow_snapshot(
+        cls,
+        levels: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Return only stable snowfall data used for change detection."""
+        return {
+            "levels": {
+                key: {
+                    "next_snow": level.get("next_snow"),
+                    "daily_snow": cls._daily_snow(level),
+                }
+                for key, level in levels.items()
+            }
         }
 
     @classmethod
@@ -133,7 +216,7 @@ class AqshaqarCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         previous_levels: dict[str, Any],
         current_levels: dict[str, Any],
     ) -> list[str]:
-        """Describe meaningful snowfall changes between forecasts."""
+        """Describe meaningful snowfall changes, ignoring rolling horizon dates."""
         changes: list[str] = []
 
         for level_key, current in current_levels.items():
@@ -152,10 +235,16 @@ class AqshaqarCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
             old_daily = cls._daily_snow(previous)
             new_daily = cls._daily_snow(current)
-            for date_value in sorted(set(old_daily) | set(new_daily)):
-                old_amount = old_daily.get(date_value)
-                new_amount = new_daily.get(date_value)
+
+            for date_value in sorted(set(old_daily) & set(new_daily)):
+                old_amount = old_daily[date_value]
+                new_amount = new_daily[date_value]
                 if old_amount == new_amount:
+                    continue
+
+                # Do not notify about a source becoming temporarily unknown
+                # unless there was a concrete snowfall value before.
+                if old_amount is None and new_amount is None:
                     continue
 
                 old_label = (
@@ -175,33 +264,59 @@ class AqshaqarCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     f"{level_name} {date_label}: {old_label} → {new_label}"
                 )
 
-                if len(changes) >= 8:
+                if len(changes) >= 12:
+                    return changes
+
+            # A newly entering forecast day is only interesting when it
+            # contains a concrete snowfall amount.
+            for date_value in sorted(set(new_daily) - set(old_daily)):
+                amount = new_daily[date_value]
+                if not isinstance(amount, (int, float)) or amount <= 0:
+                    continue
+
+                try:
+                    dt = datetime.fromisoformat(date_value)
+                    date_label = f"{dt.day} {dt.strftime('%b')}"
+                except ValueError:
+                    date_label = date_value
+
+                changes.append(
+                    f"{level_name} {date_label}: — → {amount:g} cm"
+                )
+                if len(changes) >= 12:
                     return changes
 
         return changes
 
-    @staticmethod
-    def _forecast_event_data(
-        levels: dict[str, Any], changes: list[str]
+    @classmethod
+    def _event_data(
+        cls,
+        previous_snapshot: dict[str, Any] | None,
+        current_levels: dict[str, Any],
+        changes: list[str],
     ) -> dict[str, Any]:
-        """Build a compact event payload for automations and notifications."""
-        summary: dict[str, dict[str, Any]] = {}
-        for level_key, level in levels.items():
-            summary[level_key] = {
-                "name": level.get("name"),
-                "elevation_m": level.get("elevation_m"),
-                "next_snow": AqshaqarCoordinator._next_snow_label(level),
-                "daily_snow": AqshaqarCoordinator._daily_snow(level),
-            }
-
+        """Build a stable event payload for automations and notifications."""
+        current_snapshot = cls._snow_snapshot(current_levels)
         return {
             "resort": RESORT,
             "changes": changes,
-            "levels": summary,
+            "previous": previous_snapshot or {},
+            "current": current_snapshot,
         }
 
+    async def _persist_snapshot(
+        self,
+        snapshot: dict[str, Any],
+    ) -> None:
+        """Persist the stable snowfall snapshot."""
+        try:
+            await self._snapshot_store.async_save(snapshot)
+            self._previous_snapshot = deepcopy(snapshot)
+        except Exception as err:
+            _LOGGER.warning("Unable to persist Aqshaqar snow snapshot: %s", err)
+
     async def _async_update_data(self) -> dict[str, Any]:
-        """Fetch all levels and schedule the next poll from Snow-Forecast data."""
+        """Fetch all levels and schedule the next source-reported poll."""
         tasks = [
             self._fetch_level(level_key, config)
             for level_key, config in self._level_configs.items()
@@ -214,24 +329,43 @@ class AqshaqarCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         successful_levels: dict[str, Any] = {}
 
         for (level_key, _config), result in zip(
-            self._level_configs.items(), results, strict=True
+            self._level_configs.items(),
+            results,
+            strict=True,
         ):
             if isinstance(result, Exception):
                 errors[level_key] = str(result)
                 if level_key in previous_levels:
-                    levels[level_key] = previous_levels[level_key]
+                    stale = deepcopy(previous_levels[level_key])
+                    stale["status"] = "stale"
+                    stale["last_error"] = str(result)
+                    levels[level_key] = stale
                 continue
 
+            result["status"] = "ok"
+            result["last_error"] = None
             levels[level_key] = result
             successful_levels[level_key] = result
 
         if not successful_levels:
+            self._failure_count += 1
+            delay = BACKOFF_SECONDS[
+                min(self._failure_count - 1, len(BACKOFF_SECONDS) - 1)
+            ]
+            self.update_interval = timedelta(seconds=delay)
             details = "; ".join(
                 f"{key}: {value}" for key, value in errors.items()
             ) or "all forecast levels failed"
-            raise UpdateFailed(details, retry_after=FALLBACK_RETRY_SECONDS)
+            raise UpdateFailed(details, retry_after=delay)
 
-        next_update_seconds = self._next_update_seconds(successful_levels)
+        self._failure_count = 0
+
+        source_delay = self._next_update_seconds(successful_levels)
+        if errors:
+            next_update_seconds = min(source_delay, PARTIAL_RETRY_SECONDS)
+        else:
+            next_update_seconds = source_delay
+
         self.update_interval = timedelta(seconds=next_update_seconds)
 
         fetched_at_dt = datetime.now().astimezone()
@@ -240,13 +374,34 @@ class AqshaqarCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             fetched_at_dt + timedelta(seconds=next_update_seconds)
         ).isoformat()
 
-        # Notify Home Assistant only when snowfall data or the next-snow event
-        # actually changed. A routine hourly forecast refresh with identical
-        # snowfall data produces no event and no Activity entry.
-        changes = self._forecast_changes(previous_levels, successful_levels)
+        current_snapshot = self._snow_snapshot(levels)
+        changes = self._forecast_changes(
+            (self._previous_snapshot or {}).get("levels", {}),
+            levels,
+        )
+        self._last_change = changes
+
+        await self._persist_snapshot(current_snapshot)
+
         if changes:
-            event_data = self._forecast_event_data(successful_levels, changes)
-            self.hass.bus.async_fire("aqshaqar_forecast_changed", event_data)
+            event_data = self._event_data(
+                self._previous_snapshot,
+                levels,
+                changes,
+            )
+            # Use the snapshot that existed before persistence in the event.
+            event_data["previous"] = (
+                (self._previous_snapshot or {}).copy()
+            )
+            event_data["current"] = current_snapshot
+
+            if self._device_id:
+                event_data["device_id"] = self._device_id
+
+            self.hass.bus.async_fire(
+                "aqshaqar_forecast_changed",
+                event_data,
+            )
             self.hass.bus.async_fire(
                 "logbook_entry",
                 {
@@ -266,4 +421,41 @@ class AqshaqarCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "next_update_at": next_update_at,
             "levels": levels,
             "errors": errors,
+            "consecutive_failures": self._failure_count,
+            "last_changes": changes,
+            "device_id": self._device_id,
+        }
+
+    def diagnostics(self) -> dict[str, Any]:
+        """Return safe diagnostics for HA support."""
+        levels = (self.data or {}).get("levels", {})
+        return {
+            "app": NAME,
+            "resort": RESORT,
+            "entry_id": self._entry_id,
+            "device_id": self._device_id,
+            "next_update_at": (self.data or {}).get("next_update_at"),
+            "next_update_in_seconds": (self.data or {}).get(
+                "next_update_in_seconds"
+            ),
+            "fetched_at": (self.data or {}).get("fetched_at"),
+            "consecutive_failures": self._failure_count,
+            "last_changes": self._last_change,
+            "snapshot_loaded": self._previous_snapshot is not None,
+            "levels": {
+                key: {
+                    "elevation_m": level.get("elevation_m"),
+                    "source": level.get("source"),
+                    "status": level.get("status"),
+                    "last_error": level.get("last_error"),
+                    "fetched_at": level.get("fetched_at"),
+                    "issued_at": level.get("issued_at"),
+                    "forecast_update_at": level.get("forecast_update_at"),
+                    "schedule_source": level.get("schedule_source"),
+                    "next_snow": level.get("next_snow"),
+                    "validation": level.get("validation"),
+                    "duration_seconds": level.get("duration_seconds"),
+                }
+                for key, level in levels.items()
+            },
         }
