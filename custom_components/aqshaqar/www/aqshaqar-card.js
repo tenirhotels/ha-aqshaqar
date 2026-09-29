@@ -11,34 +11,24 @@ class AqshaqarCard extends HTMLElement {
     this.render();
   }
 
-  getCardSize() {
-    return 12;
-  }
+  getCardSize() { return 12; }
 
-  static getStubConfig() {
-    return { title: "Shymbulak Weather" };
-  }
+  static getStubConfig() { return { title: "Shymbulak Weather" }; }
 
   _weather(level, elevation) {
     return this._hass?.states?.[`weather.aqshaqar_${level}_${elevation}_m`] || null;
   }
 
   _snow(level) {
-    const states = this._hass?.states || {};
-    return states[`sensor.aqshaqar_${level}_forecast`] || null;
+    return this._hass?.states?.[`sensor.aqshaqar_${level}_forecast`] || null;
   }
 
   _conditionIcon(condition) {
     const icons = {
-      sunny: "mdi:weather-sunny",
-      clear: "mdi:weather-night",
-      partlycloudy: "mdi:weather-partly-cloudy",
-      cloudy: "mdi:weather-cloudy",
-      fog: "mdi:weather-fog",
-      rainy: "mdi:weather-rainy",
-      snowy: "mdi:weather-snowy",
-      "snowy-rainy": "mdi:weather-snowy-rainy",
-      "lightning-rainy": "mdi:weather-lightning-rainy",
+      sunny: "mdi:weather-sunny", clear: "mdi:weather-night",
+      partlycloudy: "mdi:weather-partly-cloudy", cloudy: "mdi:weather-cloudy",
+      fog: "mdi:weather-fog", rainy: "mdi:weather-rainy", snowy: "mdi:weather-snowy",
+      "snowy-rainy": "mdi:weather-snowy-rainy", "lightning-rainy": "mdi:weather-lightning-rainy",
       windy: "mdi:weather-windy",
     };
     return icons[condition] || "mdi:weather-cloudy";
@@ -46,16 +36,9 @@ class AqshaqarCard extends HTMLElement {
 
   _conditionLabel(condition) {
     const labels = {
-      sunny: "Sunny",
-      clear: "Clear",
-      partlycloudy: "Partly cloudy",
-      cloudy: "Cloudy",
-      fog: "Fog",
-      rainy: "Rainy",
-      snowy: "Snowy",
-      "snowy-rainy": "Snow + rain",
-      "lightning-rainy": "Thunderstorm",
-      windy: "Windy",
+      sunny: "Sunny", clear: "Clear", partlycloudy: "Partly cloudy", cloudy: "Cloudy",
+      fog: "Fog", rainy: "Rainy", snowy: "Snowy", "snowy-rainy": "Snow + rain",
+      "lightning-rainy": "Thunderstorm", windy: "Windy",
     };
     return labels[condition] || "Cloudy";
   }
@@ -74,25 +57,21 @@ class AqshaqarCard extends HTMLElement {
     if (!value) return "—";
     const d = new Date(`${value}T12:00:00`);
     if (Number.isNaN(d.getTime())) return value;
-    return d.toLocaleDateString([], {
-      weekday: "short",
-      day: "numeric",
-      month: "short",
-    });
+    return d.toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" });
   }
 
-  _nextSnow(level) {
+  _formatNextSnow(level) {
     const state = this._snow(level);
     const next = state?.attributes?.next_snow;
-    if (!next?.amount_cm || !next?.start) return "—";
-
+    if (!next?.amount_cm || !next?.start) return null;
+    const amount = Number(next.amount_cm).toLocaleString([], { maximumFractionDigits: 1 });
     const d = new Date(next.start);
-    if (Number.isNaN(d.getTime())) return `❄ ${Number(next.amount_cm).toLocaleString([], { maximumFractionDigits: 1 })} cm`;
-
-    return `❄ ${Number(next.amount_cm).toLocaleString([], { maximumFractionDigits: 1 })} cm · ${d.toLocaleDateString([], {
-      day: "numeric",
-      month: "short",
-    })}`;
+    if (Number.isNaN(d.getTime())) return { amount: `❄ ${amount} cm`, date: "" };
+    return {
+      amount: `❄ ${amount} cm`,
+      date: d.toLocaleDateString([], { day: "numeric", month: "short" }),
+      time: d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false }),
+    };
   }
 
   _dailyForecast(level, elevation) {
@@ -101,13 +80,13 @@ class AqshaqarCard extends HTMLElement {
 
   _station(level, title, elevation) {
     const weather = this._weather(level, elevation);
-    const days = this._dailyForecast(level, elevation);
+    const days = this._dailyForecast(level, elevation).slice(0, 6);
     const currentCondition = weather?.state || "cloudy";
     const currentTemp = weather?.attributes?.temperature;
     const humidity = weather?.attributes?.humidity;
     const windSpeed = weather?.attributes?.wind_speed;
     const windBearing = weather?.attributes?.wind_bearing;
-    const nextSnow = this._nextSnow(level);
+    const nextSnow = this._formatNextSnow(level);
 
     return `
       <section class="station">
@@ -121,16 +100,21 @@ class AqshaqarCard extends HTMLElement {
             </div>
             <div class="details">
               ${humidity != null ? `<span>Humidity ${Math.round(humidity)}%</span>` : ""}
-              ${windSpeed != null ? `<span>Wind ${Math.round(windSpeed)} km/h${windBearing ? ` ${windBearing}` : ""}</span>` : ""}
+              ${windSpeed != null ? `<span>Wind ${Math.round(windSpeed)} km/h${windBearing ? ` (${windBearing})` : ""}</span>` : ""}
             </div>
           </div>
-          <div class="next">
-            <div class="next-label">Next snow</div>
-            <div class="next-value">${nextSnow}</div>
-          </div>
+          ${nextSnow ? `
+            <div class="next">
+              <div class="next-label">Next snow</div>
+              <div class="next-main">
+                <span class="next-amount">${nextSnow.amount}</span>
+                ${nextSnow.date ? `<span class="next-date">${nextSnow.date}${nextSnow.time ? ` · ${nextSnow.time}` : ""}</span>` : ""}
+              </div>
+            </div>
+          ` : ""}
         </div>
 
-        <div class="label">Daily forecast</div>
+        <div class="label">Daily forecast · Daily snow</div>
         <div class="days">
           ${days.map(day => `
             <div class="day">
@@ -153,14 +137,8 @@ class AqshaqarCard extends HTMLElement {
     if (!this._hass) return;
     if (!this.shadowRoot) this.attachShadow({ mode: "open" });
 
-    const stations = [
-      ["base", "Base", 2220],
-      ["mid", "Mid", 2692],
-      ["top", "Top", 3163],
-    ];
-
-    const updateState = this._hass.states?.["sensor.aqshaqar_forecast_update"];
-    const update = updateState?.state;
+    const stations = [["base", "Base", 2220], ["mid", "Mid", 2692], ["top", "Top", 3163]];
+    const update = this._hass.states?.["sensor.aqshaqar_forecast_update"]?.state;
 
     this.shadowRoot.innerHTML = `
       <style>
@@ -172,43 +150,52 @@ class AqshaqarCard extends HTMLElement {
         .subtitle { color:var(--secondary-text-color); font-size:12px; margin-top:4px; }
         .update { color:var(--secondary-text-color); font-size:11px; line-height:1.4; text-align:right; white-space:nowrap; }
         .stations { display:flex; flex-direction:column; gap:12px; }
-        .station { border:1px solid var(--divider-color); border-radius:18px; padding:14px; background:var(--card-background-color); min-width:0; }
-        .station-head { display:flex; align-items:flex-start; justify-content:space-between; gap:20px; }
+        .station { border:1px solid var(--divider-color); border-radius:18px; padding:14px; background:var(--card-background-color); min-width:0; box-sizing:border-box; }
+        .station-head { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:start; gap:18px; }
         .station-main { min-width:0; }
         .station-name { font-size:18px; font-weight:700; line-height:1.2; }
         .current { margin-top:7px; display:flex; align-items:center; gap:8px; min-width:0; }
         .current-icon { width:24px; height:24px; flex:0 0 24px; }
         .current-temp { font-size:28px; font-weight:700; line-height:1; }
         .condition { font-size:12px; color:var(--secondary-text-color); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-        .details { display:flex; flex-wrap:wrap; gap:6px 12px; margin-top:7px; font-size:11px; color:var(--secondary-text-color); }
-        .next { flex:0 0 auto; min-width:160px; max-width:42%; text-align:right; }
-        .next-label { font-size:11px; color:var(--secondary-text-color); margin-bottom:4px; }
-        .next-value { font-size:15px; font-weight:700; color:var(--primary-color); white-space:nowrap; }
+        .details { display:flex; flex-wrap:wrap; gap:5px 12px; margin-top:7px; font-size:11px; color:var(--secondary-text-color); }
+        .next { min-width:150px; max-width:230px; padding:8px 10px; border-radius:12px; background:var(--primary-background-color); box-sizing:border-box; }
+        .next-label { font-size:10px; color:var(--secondary-text-color); margin-bottom:3px; }
+        .next-main { display:flex; flex-direction:column; gap:2px; }
+        .next-amount { font-size:15px; font-weight:700; color:var(--primary-color); white-space:nowrap; }
+        .next-date { font-size:11px; color:var(--secondary-text-color); white-space:nowrap; }
         .label { margin-top:15px; margin-bottom:8px; font-size:12px; color:var(--secondary-text-color); }
-        .days { display:grid; grid-template-columns:repeat(6, minmax(0, 1fr)); gap:7px; min-width:0; }
-        .day { min-width:0; padding:9px 5px; border-radius:12px; background:var(--primary-background-color); text-align:center; overflow:hidden; }
-        .date { font-size:11px; color:var(--secondary-text-color); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .days { display:grid; grid-template-columns:repeat(6, minmax(82px, 1fr)); gap:7px; min-width:0; }
+        .day { min-width:0; padding:9px 5px; border-radius:12px; background:var(--primary-background-color); text-align:center; overflow:hidden; box-sizing:border-box; }
+        .date { font-size:10px; color:var(--secondary-text-color); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
         .day-icon { display:block; width:22px; height:22px; margin:7px auto 4px; }
         .temps { display:flex; justify-content:center; align-items:baseline; gap:5px; font-size:15px; font-weight:700; }
         .low { color:var(--secondary-text-color); font-weight:500; }
         .day-condition { margin-top:4px; min-height:28px; font-size:10px; line-height:1.25; color:var(--secondary-text-color); display:flex; align-items:flex-start; justify-content:center; }
         .snow { margin-top:6px; min-height:17px; font-size:11px; font-weight:700; color:var(--primary-color); line-height:1.3; white-space:nowrap; }
-        @media (max-width: 700px) {
-          .wrap { padding:12px; }
-          .top { gap:10px; }
-          .title { font-size:19px; }
-          .station-head { gap:12px; }
-          .next { min-width:130px; }
-          .days { grid-template-columns:repeat(6, minmax(72px, 1fr)); overflow-x:auto; padding-bottom:2px; }
-          .day { min-width:72px; }
+
+        @media (max-width: 850px) {
+          .station-head { grid-template-columns:minmax(0,1fr) 145px; gap:12px; }
+          .next { min-width:0; max-width:none; }
+          .days { grid-template-columns:repeat(6, minmax(78px, 1fr)); overflow-x:auto; padding-bottom:3px; scrollbar-width:thin; }
         }
-        @media (max-width: 480px) {
+
+        @media (max-width: 600px) {
+          .wrap { padding:12px; }
+          .top { gap:8px; }
+          .title { font-size:19px; }
+          .update { font-size:10px; }
+          .station-head { grid-template-columns:1fr; gap:10px; }
+          .next { width:100%; max-width:none; }
+          .next-main { flex-direction:row; align-items:baseline; gap:8px; flex-wrap:wrap; }
+          .days { grid-template-columns:repeat(6, 78px); }
+        }
+
+        @media (max-width: 420px) {
           .top { flex-direction:column; }
           .update { text-align:left; }
-          .station-head { flex-direction:column; }
-          .next { max-width:none; min-width:0; text-align:left; }
-          .next-value { white-space:normal; }
-          .days { grid-template-columns:repeat(6, 78px); }
+          .station { padding:12px; }
+          .current-temp { font-size:26px; }
         }
       </style>
       <ha-card>
@@ -230,7 +217,6 @@ class AqshaqarCard extends HTMLElement {
 }
 
 customElements.define("aqshaqar-card", AqshaqarCard);
-
 window.customCards = window.customCards || [];
 if (!window.customCards.some(card => card.type === "aqshaqar-card")) {
   window.customCards.push({
