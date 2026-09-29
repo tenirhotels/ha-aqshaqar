@@ -10,7 +10,13 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import device_registry as dr
 
-from .const import DOMAIN
+from .const import (
+    DEVICE_ID,
+    DOMAIN,
+    NAME,
+    RESORT,
+    WEBSITE_URL,
+)
 from .coordinator import AqshaqarCoordinator
 
 PLATFORMS = ("sensor", "weather")
@@ -28,7 +34,20 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Aqshaqar from a config entry."""
-    coordinator = AqshaqarCoordinator(hass)
+    coordinator = AqshaqarCoordinator(hass, entry.entry_id)
+    await coordinator.async_initialize()
+
+    device_registry = dr.async_get(hass)
+    device = device_registry.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, DEVICE_ID)},
+        manufacturer="Tenir Shymbulak",
+        name=NAME,
+        model=f"{RESORT} Snow Forecast",
+        configuration_url=WEBSITE_URL,
+    )
+    coordinator.set_device_id(device.id)
+
     try:
         await coordinator.async_config_entry_first_refresh()
     except Exception as err:
@@ -36,16 +55,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-
-    # Remove legacy station devices created by older Aqshaqar releases.
-    # Weather entities are now attached to the single Aqshaqar device.
-    device_registry = dr.async_get(hass)
-    for legacy_level in ("base", "mid", "top"):
-        legacy_device = device_registry.async_get_device_by_identifier(
-            (DOMAIN, legacy_level), entry.entry_id
-        )
-        if legacy_device is not None:
-            device_registry.async_remove_device(legacy_device.id)
 
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
     return True
