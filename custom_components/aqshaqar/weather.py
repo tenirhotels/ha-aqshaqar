@@ -182,6 +182,9 @@ class AqshaqarWeather(CoordinatorEntity[AqshaqarCoordinator], WeatherEntity):
             "issued_at": level.get("issued_at"),
             "forecast_update_at": level.get("forecast_update_at"),
             "next_snow": level.get("next_snow"),
+            "status": level.get("status"),
+            "last_error": level.get("last_error"),
+            "fetched_at": level.get("fetched_at"),
             "source": level.get("source"),
         }
 
