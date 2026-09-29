@@ -38,6 +38,56 @@ PARTIAL_RETRY_SECONDS = PARTIAL_RETRY_MINUTES * 60
 BACKOFF_SECONDS = (120, 300, 600, 1200, 1800, 3600)
 
 
+class AqshaqarSnapshotStore(Store[dict[str, Any]]):
+    """Persistent Aqshaqar snowfall snapshot store."""
+
+    async def _async_migrate_func(
+        self,
+        old_major_version: int,
+        old_minor_version: int,
+        old_data: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Migrate Aqshaqar snapshot storage to the current format."""
+        if not isinstance(old_data, dict):
+            return {"levels": {}}
+
+        old_levels = old_data.get("levels", {})
+        if not isinstance(old_levels, dict):
+            return {"levels": {}}
+
+        if old_major_version == SNAPSHOT_STORE_VERSION:
+            return old_data
+
+        if old_major_version not in (1, 2):
+            raise ValueError(
+                f"Unsupported Aqshaqar snapshot version: {old_major_version}"
+            )
+
+        migrated_levels: dict[str, Any] = {}
+
+        for level_key, old_level in old_levels.items():
+            if not isinstance(old_level, dict):
+                continue
+
+            old_next_snow = old_level.get("next_snow")
+            if not isinstance(old_next_snow, dict):
+                old_next_snow = {}
+
+            old_daily_snow = old_level.get("daily_snow")
+            if not isinstance(old_daily_snow, dict):
+                old_daily_snow = {}
+
+            migrated_levels[str(level_key)] = {
+                "next_snow": {
+                    "amount_cm": old_next_snow.get("amount_cm"),
+                    "start": old_next_snow.get("start"),
+                },
+                "daily_snow": old_daily_snow,
+            }
+
+        return {"levels": migrated_levels}
+
+
 class AqshaqarCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Coordinate one poll for all Shymbulak elevations."""
 
@@ -53,7 +103,7 @@ class AqshaqarCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._device_id: str | None = None
         self._failure_count = 0
         self._last_change: list[str] = []
-        self._snapshot_store = Store(
+        self._snapshot_store = AqshaqarSnapshotStore(
             hass,
             SNAPSHOT_STORE_VERSION,
             f"aqshaqar_{entry_id}_snow_snapshot",
