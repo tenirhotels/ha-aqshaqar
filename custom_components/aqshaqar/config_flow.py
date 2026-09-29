@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from homeassistant import config_entries
 import voluptuous as vol
+
+from homeassistant import config_entries
 
 from .const import DOMAIN, NAME, VERSION
 
