@@ -110,7 +110,7 @@ class AqshaqarCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
                 html = await response.text()
 
-        except (ClientError, asyncio.TimeoutError, UpdateFailed) as err:
+        except (ClientError, TimeoutError, UpdateFailed) as err:
             raise UpdateFailed(f"{level_key}: {err}") from err
 
         try:
