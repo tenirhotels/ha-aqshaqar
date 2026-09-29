@@ -125,6 +125,9 @@ class AqshaqarWeather(CoordinatorEntity[AqshaqarCoordinator], WeatherEntity):
 
         self._attr_unique_id = f"{DOMAIN}_{level_key}_weather"
         self._attr_name = f"{self._level_name} ({self._elevation} m)"
+        self._attr_suggested_object_id = (
+            f"{DOMAIN}_{level_key}_{self._elevation}_m"
+        )
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, "shymbulak")},
             name=NAME,
