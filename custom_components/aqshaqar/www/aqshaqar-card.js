@@ -22,8 +22,8 @@ class AqshaqarCard extends HTMLElement {
   _state(level) {
     const states = this._hass?.states || {};
     return (
+      states[`sensor.aqshaqar_${level}_forecast`] ||
       states[`sensor.aqshaqar_${level}_snow_forecast`] ||
-      states[`sensor.${level}_snow_forecast`] ||
       states[`sensor.${level}_forecast`] ||
       null
     );
