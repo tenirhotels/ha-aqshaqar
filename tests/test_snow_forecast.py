@@ -32,9 +32,7 @@ def make_html(
     next_snow: tuple[float, str] | None = (3.0, "2026-10-08T08:00:00+05:00"),
 ) -> str:
     dates = []
-    for day_index, date_value in enumerate(
-        ["2026-09-29", "2026-09-30", "2026-10-01", "2026-10-02"]
-    ):
+    for date_value in ["2026-09-29", "2026-09-30", "2026-10-01", "2026-10-02"]:
         colspan = periods // 4
         dates.append(
             _cell(
@@ -45,14 +43,9 @@ def make_html(
             )
         )
 
-    time_cells = "".join(
-        _cell(f"{index}") for index in range(periods)
-    )
+    time_cells = "".join(_cell(f"{index}") for index in range(periods))
 
-    def row(
-        name: str,
-        values: list[str | None],
-    ) -> str:
+    def row(name: str, values: list[str | None]) -> str:
         if short_optional_row:
             values = values[:-1]
         return (
@@ -69,21 +62,11 @@ def make_html(
     wind = [
         '<span class="wind-icon" data-speed="5"><span class="wind-icon__tooltip">N</span></span>'
     ] * periods
-    rain = [
-        '<span class="rain-amount" data-value="1">1 mm</span>'
-    ] * periods
-    temp_max = [
-        '<span class="temp-value" data-value="7">7</span>'
-    ] * periods
-    temp_min = [
-        '<span class="temp-value" data-value="3">3</span>'
-    ] * periods
-    chill = [
-        '<span class="temp-value" data-value="2">2</span>'
-    ] * periods
-    freezing = [
-        '<span class="level-value" data-value="3700">3700</span>'
-    ] * periods
+    rain = ['<span class="rain-amount" data-value="1">1 mm</span>'] * periods
+    temp_max = ['<span class="temp-value" data-value="7">7</span>'] * periods
+    temp_min = ['<span class="temp-value" data-value="3">3</span>'] * periods
+    chill = ['<span class="temp-value" data-value="2">2</span>'] * periods
+    freezing = ['<span class="level-value" data-value="3700">3700</span>'] * periods
     humidity = ["50"] * periods
 
     event_block = ""
@@ -114,13 +97,7 @@ def make_html(
         '<tr data-row="days">' + "".join(dates) + "</tr>",
         f'<tr data-row="time">{time_cells}</tr>',
         row("phrases", phrases),
-        row(
-            "weather",
-            [
-                '<img class="weather-icon" alt="rain" />'
-                for _ in range(periods)
-            ],
-        ),
+        row("weather", ['<img class="weather-icon" alt="rain" />' for _ in range(periods)]),
         row("wind", wind),
         row("snow", snow_values),
         row("rain", rain),
@@ -136,9 +113,7 @@ def make_html(
 <head><title>Shymbulak Snow Forecast</title></head>
 <body>
   <h1>Weather Forecast for Shymbulak</h1>
-  <table class="forecast-table">
-    {''.join(rows)}
-  </table>
+  <table class="forecast-table">{''.join(rows)}</table>
   <script>
     const serverTime = 1790636400;
     const forecastUpdateTime = 1790643600;
@@ -161,6 +136,25 @@ def test_parser_accepts_dynamic_period_count() -> None:
     assert data["daily_snow"][1]["snow_cm"] == 3.0
     assert data["next_snow"]["amount_cm"] == 3.0
     assert data["next_snow"]["start"] == "2026-10-08T08:00:00+05:00"
+
+
+def test_parser_reads_visible_next_snow_when_jsonld_is_missing() -> None:
+    html = make_html(next_snow=None).replace(
+        "<h1>Weather Forecast for Shymbulak</h1>",
+        "<h1>Weather Forecast for Shymbulak</h1>"
+        "<div>Next snow in Shymbulak: 20.0 cm on Mon 5th</div>",
+    )
+
+    data = parse_level_html(
+        "top",
+        {"name": "Top", "elevation_m": 3163, "url": "https://example.test/top"},
+        html,
+    )
+
+    assert data["next_snow"]["amount_cm"] == 20
+    assert data["next_snow"]["source"] == "snow_forecast_visible"
+    assert data["next_snow"]["source_date"] == "2026-10-05"
+    assert data["validation"]["next_snow_amount_cm"] == 20
 
 
 def test_parser_normalizes_optional_short_row() -> None:
