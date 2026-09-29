@@ -61,7 +61,7 @@ For each elevation Aqshaqar provides:
 
 - **Next snow** — amount, date and time from Snow-Forecast.
 - **Daily snowfall** — explicit snowfall amounts grouped by calendar date.
-- **Snow forecast sensor** — compact summary of the next meaningful snowfall.
+- **Next snow sensor** — compact summary of the explicit Next snow event; daily forecast remains on the weather entity.
 - **Weather entity** — normal Home Assistant weather presentation with daily forecast.
 
 The number of source forecast periods is dynamic. Aqshaqar does not assume a fixed number such as 16 or 17. Optional source rows are normalized to the actual time-column count.
