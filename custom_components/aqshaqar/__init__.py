@@ -40,7 +40,7 @@ async def _async_migrate_weather_entity_ids(
     hass: HomeAssistant,
     entry: ConfigEntry,
 ) -> None:
-    """Fix legacy duplicated weather entity IDs without touching custom IDs."""
+    """Migrate legacy entity IDs and integration-generated names."""
     registry = er.async_get(hass)
 
     for level_key, level in LEVELS.items():
@@ -62,6 +62,40 @@ async def _async_migrate_weather_entity_ids(
             old_entity_id,
             new_entity_id=new_entity_id,
         )
+
+    for level_key, level in LEVELS.items():
+        elevation = int(level["elevation_m"])
+        level_name = str(level["name"])
+
+        weather_entity_id = f"weather.{DOMAIN}_{level_key}_{elevation}_m"
+        weather_entry = registry.async_get(weather_entity_id)
+        if (
+            weather_entry
+            and weather_entry.config_entry_id == entry.entry_id
+            and weather_entry.name in {
+                level_name,
+                f"{level_name} ({elevation} m)",
+            }
+        ):
+            registry.async_update_entity(
+                weather_entity_id,
+                name=f"{elevation} {level_name}",
+            )
+
+        sensor_entity_id = f"sensor.{DOMAIN}_{level_key}_forecast"
+        sensor_entry = registry.async_get(sensor_entity_id)
+        if (
+            sensor_entry
+            and sensor_entry.config_entry_id == entry.entry_id
+            and sensor_entry.name in {
+                f"Aqshaqar Next snow at the {level_name}",
+                f"Next snow at the {level_name}",
+            }
+        ):
+            registry.async_update_entity(
+                sensor_entity_id,
+                name=f"Next snow at the {level_name}",
+            )
 
     for level_key in LEVELS:
         old_entity_id = f"sensor.{DOMAIN}_{level_key}_snow_forecast"
