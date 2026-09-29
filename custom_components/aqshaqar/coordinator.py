@@ -213,7 +213,7 @@ class AqshaqarCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
             changes.append(
                 f"{level_name} · {int(current['elevation_m'])} m — "
-                f"Next snow: {old_label} → {new_label}"
+                f"~~{old_label}~~ → {new_label}"
             )
 
         return changes
