@@ -70,9 +70,9 @@ The number of source forecast periods is dynamic. Aqshaqar does not assume a fix
 
 Weather:
 
-- `weather.aqshaqar_base`
-- `weather.aqshaqar_mid`
-- `weather.aqshaqar_top`
+- `weather.aqshaqar_base_2220_m`
+- `weather.aqshaqar_mid_2692_m`
+- `weather.aqshaqar_top_3163_m`
 
 Snow:
 
@@ -94,7 +94,15 @@ The integration fires:
 
 `aqshaqar_forecast_changed`
 
-only when snowfall information changes, for example:
+when the accepted snowfall forecast changes, including Next snow and daily snowfall changes.
+
+It also fires:
+
+`aqshaqar_next_snow_changed`
+
+when the explicit Next snow event changes. This event is intended for operational notifications such as Telegram.
+
+Examples:
 
 `Mid 8 Oct: 3 cm → 5 cm`
 
