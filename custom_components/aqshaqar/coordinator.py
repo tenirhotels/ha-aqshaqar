@@ -10,6 +10,7 @@ from typing import Any
 
 from aiohttp import ClientError, ClientTimeout
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import (
@@ -312,7 +313,7 @@ class AqshaqarCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._previous_snapshot = deepcopy(snapshot)
         try:
             await self._snapshot_store.async_save(snapshot)
-        except (OSError, TypeError, ValueError) as err:
+        except (HomeAssistantError, OSError, TypeError, ValueError) as err:
             _LOGGER.warning("Unable to persist Aqshaqar snow snapshot: %s", err)
 
     async def _async_update_data(self) -> dict[str, Any]:
