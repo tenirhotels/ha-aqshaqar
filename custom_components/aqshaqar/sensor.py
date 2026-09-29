@@ -72,6 +72,8 @@ async def async_setup_entry(
 class AqshaqarSnowSensor(AqshaqarBaseEntity, SensorEntity):
     """One snowfall forecast sensor per Shymbulak elevation."""
 
+    _attr_has_entity_name = False
+
     def __init__(
         self,
         coordinator: AqshaqarCoordinator,
