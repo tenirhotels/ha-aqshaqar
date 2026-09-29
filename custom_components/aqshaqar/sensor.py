@@ -16,36 +16,20 @@ from .const import DEVICE_ID, DOMAIN, NAME, RESORT, WEBSITE_URL
 from .coordinator import AqshaqarCoordinator
 
 
-def _daily_snow(level: dict[str, Any]) -> list[dict[str, Any]]:
-    """Return coordinator-normalized daily snowfall data."""
-    value = level.get("daily_snow")
-    return value if isinstance(value, list) else []
-
-
 def _format_snow_summary(level: dict[str, Any]) -> str:
-    """Return the explicit next-snow event, then the first daily amount."""
+    """Return only the explicit Snow-Forecast Next snow event."""
     next_snow = level.get("next_snow") or {}
     amount = next_snow.get("amount_cm")
     start = next_snow.get("start")
 
-    if amount is not None and start:
-        try:
-            dt = datetime.fromisoformat(str(start))
-            return f"❄ {amount:g} cm · {dt.day} {dt.strftime('%b')}, {dt:%H:%M}"
-        except ValueError:
-            return f"❄ {amount:g} cm"
+    if amount is None or not start:
+        return "No snow expected"
 
-    for day in _daily_snow(level):
-        amount = day.get("snow_cm")
-        if isinstance(amount, (int, float)) and amount > 0:
-            try:
-                dt = datetime.fromisoformat(str(day["date"]))
-                label = dt.strftime("%-d %b")
-            except ValueError:
-                label = str(day["date"])
-            return f"❄ {amount:g} cm · {label}"
-
-    return "No snow expected"
+    try:
+        dt = datetime.fromisoformat(str(start))
+        return f"❄ {amount:g} cm · {dt.day} {dt.strftime('%b')}, {dt:%H:%M}"
+    except ValueError:
+        return f"❄ {amount:g} cm"
 
 
 class AqshaqarBaseEntity(CoordinatorEntity[AqshaqarCoordinator]):
@@ -122,7 +106,6 @@ class AqshaqarSnowSensor(AqshaqarBaseEntity, SensorEntity):
             "fetched_at": level.get("fetched_at"),
             "source_update_at": level.get("forecast_update_at"),
             "next_snow": level.get("next_snow"),
-            "forecast": _daily_snow(level),
             "source": level.get("source"),
         }
 
