@@ -372,11 +372,12 @@ def parse_level_html(
     warnings: list[str] = []
     aligned: dict[str, list[Any]] = {}
     for name, values in rows.items():
+        original_length = len(values)
         values, changed = _align(values, forecast_length)
         aligned[name] = values
         if changed:
             warnings.append(
-                f"{name} row had {len(rows[name])} cells; "
+                f"{name} row had {original_length} cells; "
                 f"normalized to {forecast_length}"
             )
 
