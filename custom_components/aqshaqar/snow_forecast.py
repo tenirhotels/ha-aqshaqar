@@ -195,7 +195,7 @@ def _next_date_from_source_label(
         return None
 
     base = (reference or datetime.now(TZ)).date()
-    for offset in range(0, 370):
+    for offset in range(370):
         candidate = base + timedelta(days=offset)
         if candidate.day == day and candidate.weekday() == weekday_number:
             return candidate.isoformat()
