@@ -35,6 +35,7 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     )
     return True
 
+
 async def _async_migrate_entity_ids(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -116,7 +117,7 @@ async def _async_migrate_entity_ids(
             )
 
 
-async def async_setup_entryasync def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Aqshaqar from a config entry."""
     coordinator = AqshaqarCoordinator(hass, entry.entry_id)
     await coordinator.async_initialize()
