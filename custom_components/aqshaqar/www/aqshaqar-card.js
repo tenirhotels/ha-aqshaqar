@@ -205,7 +205,7 @@ class AqshaqarCard extends HTMLElement {
         .next-amount { font-size:15px; font-weight:700; color:var(--primary-color); white-space:nowrap; }
         .next-date { font-size:11px; color:var(--secondary-text-color); white-space:nowrap; }
         .label { margin-top:15px; margin-bottom:8px; font-size:12px; color:var(--secondary-text-color); }
-        .days { display:grid; grid-template-columns:repeat(6, minmax(82px, 1fr)); gap:7px; min-width:0; }
+        .days { margin-top:15px; display:grid; grid-template-columns:repeat(6, minmax(82px, 1fr)); gap:7px; min-width:0; }
         .day { min-width:0; padding:9px 5px; border-radius:12px; background:var(--primary-background-color); text-align:center; overflow:hidden; box-sizing:border-box; }
         .date { font-size:10px; color:var(--secondary-text-color); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
         .day-icon { display:block; width:22px; height:22px; margin:7px auto 4px; }
