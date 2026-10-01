@@ -63,10 +63,25 @@ class AqshaqarCard extends HTMLElement {
   _formatNextSnow(level) {
     const state = this._snow(level);
     const next = state?.attributes?.next_snow;
-    if (!next?.amount_cm || !next?.start) return null;
+    if (next?.amount_cm == null) return null;
     const amount = Number(next.amount_cm).toLocaleString([], { maximumFractionDigits: 1 });
-    const d = new Date(next.start);
-    if (Number.isNaN(d.getTime())) return { amount: `❄ ${amount} cm`, date: "" };
+
+    if (next.start) {
+      const d = new Date(next.start);
+      if (!Number.isNaN(d.getTime())) {
+        return {
+          amount: `❄ ${amount} cm`,
+          date: d.toLocaleDateString([], { day: "numeric", month: "short" }),
+          time: d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false }),
+        };
+      }
+    }
+
+    return {
+      amount: `❄ ${amount} cm`,
+      date: next.source_label || next.source_date || "",
+      time: "",
+    };
     return {
       amount: `❄ ${amount} cm`,
       date: d.toLocaleDateString([], { day: "numeric", month: "short" }),
