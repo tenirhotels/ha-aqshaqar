@@ -22,14 +22,21 @@ def _format_snow_summary(level: dict[str, Any]) -> str:
     amount = next_snow.get("amount_cm")
     start = next_snow.get("start")
 
-    if amount is None or not start:
+    if amount is None:
         return "No snow expected"
 
-    try:
-        dt = datetime.fromisoformat(str(start))
-        return f"❄ {amount:g} cm · {dt.day} {dt.strftime('%b')}, {dt:%H:%M}"
-    except ValueError:
-        return f"❄ {amount:g} cm"
+    if start:
+        try:
+            dt = datetime.fromisoformat(str(start))
+            return f"❄ {amount:g} cm · {dt.day} {dt.strftime('%b')}, {dt:%H:%M}"
+        except ValueError:
+            pass
+
+    source_label = next_snow.get("source_label") or next_snow.get("source_date")
+    if source_label:
+        return f"❄ {amount:g} cm · {source_label}"
+
+    return f"❄ {amount:g} cm"
 
 
 class AqshaqarBaseEntity(CoordinatorEntity[AqshaqarCoordinator]):
