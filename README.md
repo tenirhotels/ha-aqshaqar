@@ -70,15 +70,15 @@ The number of source forecast periods is dynamic. Aqshaqar does not assume a fix
 
 Weather:
 
-- `weather.aqshaqar_base_2220_m`
-- `weather.aqshaqar_mid_2692_m`
-- `weather.aqshaqar_top_3163_m`
+- `weather.aqshaqar_2220_base`
+- `weather.aqshaqar_2692_mid`
+- `weather.aqshaqar_3163_top`
 
 Snow:
 
-- `sensor.aqshaqar_base_forecast`
-- `sensor.aqshaqar_mid_forecast`
-- `sensor.aqshaqar_top_forecast`
+- `sensor.aqshaqar_next_snow_at_the_base`
+- `sensor.aqshaqar_next_snow_at_the_mid`
+- `sensor.aqshaqar_next_snow_at_the_top`
 
 Diagnostics:
 
