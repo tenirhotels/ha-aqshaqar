@@ -14,7 +14,7 @@ from homeassistant.components.weather import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfTemperature
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -124,13 +124,21 @@ class AqshaqarWeather(CoordinatorEntity[AqshaqarCoordinator], WeatherEntity):
 
         self._attr_unique_id = f"{DOMAIN}_{level_key}_weather"
         self._attr_name = f"{self._elevation} {self._level_name}"
-        self._attr_suggested_object_id = f"{DOMAIN}_{level_key}_{self._elevation}_m"
+        self._attr_suggested_object_id = f"{DOMAIN}_{self._elevation}_{level_key}"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, "shymbulak")},
             name=NAME,
             manufacturer="Tenir Shymbulak",
             model=f"{RESORT} Snow Forecast",
             configuration_url=WEBSITE_URL,
+        )
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Update state and notify active daily forecast subscribers."""
+        self.async_write_ha_state()
+        self.hass.async_create_task(
+            self.async_update_listeners(("daily",))
         )
 
     @property

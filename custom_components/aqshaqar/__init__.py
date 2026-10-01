@@ -31,44 +31,42 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     """Set up Aqshaqar frontend resources."""
     card_path = Path(__file__).parent / "www" / "aqshaqar-card.js"
     await hass.http.async_register_static_paths(
-        [StaticPathConfig(CARD_URL, str(card_path), True)]
+        [StaticPathConfig(CARD_URL, str(card_path), False)]
     )
     return True
 
 
-async def _async_migrate_weather_entity_ids(
+async def _async_migrate_entity_ids(
     hass: HomeAssistant,
     entry: ConfigEntry,
 ) -> None:
-    """Migrate legacy entity IDs and integration-generated names."""
+    """Migrate legacy entity IDs to the current Aqshaqar naming scheme."""
     registry = er.async_get(hass)
-
-    for level_key, level in LEVELS.items():
-        elevation = int(level["elevation_m"])
-        old_entity_id = f"weather.{DOMAIN}_{level_key}_{level_key}"
-        new_entity_id = f"weather.{DOMAIN}_{level_key}_{elevation}_m"
-
-        registry_entry = registry.async_get(old_entity_id)
-        if (
-            not registry_entry
-            or registry_entry.config_entry_id != entry.entry_id
-        ):
-            continue
-
-        if registry.async_get(new_entity_id):
-            continue
-
-        registry.async_update_entity(
-            old_entity_id,
-            new_entity_id=new_entity_id,
-        )
 
     for level_key, level in LEVELS.items():
         elevation = int(level["elevation_m"])
         level_name = str(level["name"])
 
-        weather_entity_id = f"weather.{DOMAIN}_{level_key}_{elevation}_m"
-        weather_entry = registry.async_get(weather_entity_id)
+        canonical_weather = f"weather.{DOMAIN}_{elevation}_{level_key}"
+        legacy_weather_ids = (
+            f"weather.{DOMAIN}_{level_key}_{elevation}_m",
+            f"weather.{DOMAIN}_{level_key}_{level_key}",
+        )
+
+        if not registry.async_get(canonical_weather):
+            for legacy_id in legacy_weather_ids:
+                legacy_entry = registry.async_get(legacy_id)
+                if (
+                    legacy_entry
+                    and legacy_entry.config_entry_id == entry.entry_id
+                ):
+                    registry.async_update_entity(
+                        legacy_id,
+                        new_entity_id=canonical_weather,
+                    )
+                    break
+
+        weather_entry = registry.async_get(canonical_weather)
         if (
             weather_entry
             and weather_entry.config_entry_id == entry.entry_id
@@ -78,45 +76,45 @@ async def _async_migrate_weather_entity_ids(
             }
         ):
             registry.async_update_entity(
-                weather_entity_id,
+                canonical_weather,
                 name=f"{elevation} {level_name}",
             )
 
-        sensor_entity_id = f"sensor.{DOMAIN}_{level_key}_forecast"
-        sensor_entry = registry.async_get(sensor_entity_id)
+        canonical_sensor = (
+            f"sensor.{DOMAIN}_next_snow_at_the_{level_key}"
+        )
+        legacy_sensor_ids = (
+            f"sensor.{DOMAIN}_{level_key}_forecast",
+            f"sensor.{DOMAIN}_{level_key}_snow_forecast",
+        )
+
+        if not registry.async_get(canonical_sensor):
+            for legacy_id in legacy_sensor_ids:
+                legacy_entry = registry.async_get(legacy_id)
+                if (
+                    legacy_entry
+                    and legacy_entry.config_entry_id == entry.entry_id
+                ):
+                    registry.async_update_entity(
+                        legacy_id,
+                        new_entity_id=canonical_sensor,
+                    )
+                    break
+
+        sensor_entry = registry.async_get(canonical_sensor)
         if (
             sensor_entry
             and sensor_entry.config_entry_id == entry.entry_id
+            and (
+                sensor_entry.name is None
+                or sensor_entry.name.startswith("Aqshaqar ")
+            )
         ):
             registry.async_update_entity(
-                sensor_entity_id,
+                canonical_sensor,
                 has_entity_name=False,
-                name=(
-                    f"Next snow at the {level_name}"
-                    if sensor_entry.name is None
-                    or sensor_entry.name.startswith("Aqshaqar ")
-                    else sensor_entry.name
-                ),
+                name=f"Next snow at the {level_name}",
             )
-
-    for level_key in LEVELS:
-        old_entity_id = f"sensor.{DOMAIN}_{level_key}_snow_forecast"
-        new_entity_id = f"sensor.{DOMAIN}_{level_key}_forecast"
-
-        registry_entry = registry.async_get(old_entity_id)
-        if (
-            not registry_entry
-            or registry_entry.config_entry_id != entry.entry_id
-        ):
-            continue
-
-        if registry.async_get(new_entity_id):
-            continue
-
-        registry.async_update_entity(
-            old_entity_id,
-            new_entity_id=new_entity_id,
-        )
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -134,7 +132,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         configuration_url=WEBSITE_URL,
     )
     coordinator.set_device_id(device.id)
-    await _async_migrate_weather_entity_ids(hass, entry)
+    await _async_migrate_entity_ids(hass, entry)
 
     try:
         await coordinator.async_config_entry_first_refresh()
