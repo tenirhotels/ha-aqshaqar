@@ -15,12 +15,10 @@ class AqshaqarCard extends HTMLElement {
 
   static getStubConfig() { return { title: "Shymbulak Weather" }; }
 
+  // Aqshaqar weather entities use: weather.aqshaqar_2220_base,
+  // weather.aqshaqar_2692_mid and weather.aqshaqar_3163_top.
   _weather(level, elevation) {
-    return this._hass?.states?.[`weather.aqshaqar_${level}_${elevation}_m`] || null;
-  }
-
-  _snow(level) {
-    return this._hass?.states?.[`sensor.aqshaqar_${level}_forecast`] || null;
+    return this._hass?.states?.[`weather.aqshaqar_${elevation}_${level}`] || null;
   }
 
   _conditionIcon(condition) {
@@ -40,17 +38,19 @@ class AqshaqarCard extends HTMLElement {
       fog: "Fog", rainy: "Rainy", snowy: "Snowy", "snowy-rainy": "Snow + rain",
       "lightning-rainy": "Thunderstorm", windy: "Windy",
     };
-    return labels[condition] || "Cloudy";
+    return labels[condition] || condition || "Unknown";
   }
 
   _formatTemp(value) {
-    if (typeof value !== "number") return "—";
-    return `${Math.round(value)}°`;
+    const number = Number(value);
+    if (!Number.isFinite(number)) return "—";
+    return `${Math.round(number)}°`;
   }
 
   _formatSnow(value) {
-    if (typeof value !== "number") return "—";
-    return `❄ ${Number(value).toLocaleString([], { maximumFractionDigits: 1 })} cm`;
+    const number = Number(value);
+    if (!Number.isFinite(number)) return "—";
+    return `❄ ${number.toLocaleString([], { maximumFractionDigits: 1 })} cm`;
   }
 
   _formatDate(value) {
@@ -60,17 +60,18 @@ class AqshaqarCard extends HTMLElement {
     return d.toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" });
   }
 
-  _formatNextSnow(level) {
-    const state = this._snow(level);
-    const next = state?.attributes?.next_snow;
-    if (next?.amount_cm == null) return null;
-    const amount = Number(next.amount_cm).toLocaleString([], { maximumFractionDigits: 1 });
+  _formatNextSnow(weather) {
+    const next = weather?.attributes?.next_snow;
+    if (!next || next.amount_cm == null) return null;
+
+    const amount = Number(next.amount_cm);
+    if (!Number.isFinite(amount)) return null;
 
     if (next.start) {
       const d = new Date(next.start);
       if (!Number.isNaN(d.getTime())) {
         return {
-          amount: `❄ ${amount} cm`,
+          amount: `❄ ${amount.toLocaleString([], { maximumFractionDigits: 1 })} cm`,
           date: d.toLocaleDateString([], { day: "numeric", month: "short" }),
           time: d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false }),
         };
@@ -78,30 +79,26 @@ class AqshaqarCard extends HTMLElement {
     }
 
     return {
-      amount: `❄ ${amount} cm`,
-      date: next.source_label || next.source_date || "",
+      amount: `❄ ${amount.toLocaleString([], { maximumFractionDigits: 1 })} cm`,
+      date: next.description || "",
       time: "",
-    };
-    return {
-      amount: `❄ ${amount} cm`,
-      date: d.toLocaleDateString([], { day: "numeric", month: "short" }),
-      time: d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false }),
     };
   }
 
-  _dailyForecast(level, elevation) {
-    return this._weather(level, elevation)?.attributes?.daily_forecast || [];
+  _dailyForecast(weather) {
+    return weather?.attributes?.daily_forecast || [];
   }
 
   _station(level, title, elevation) {
     const weather = this._weather(level, elevation);
-    const days = this._dailyForecast(level, elevation).slice(0, 6);
+    const days = this._dailyForecast(weather).slice(0, 6);
     const currentCondition = weather?.state || "cloudy";
     const currentTemp = weather?.attributes?.temperature;
+    const apparentTemp = weather?.attributes?.apparent_temperature;
     const humidity = weather?.attributes?.humidity;
     const windSpeed = weather?.attributes?.wind_speed;
     const windBearing = weather?.attributes?.wind_bearing;
-    const nextSnow = this._formatNextSnow(level);
+    const nextSnow = this._formatNextSnow(weather);
 
     return `
       <section class="station">
@@ -114,8 +111,9 @@ class AqshaqarCard extends HTMLElement {
               <span class="condition">${this._conditionLabel(currentCondition)}</span>
             </div>
             <div class="details">
-              ${humidity != null ? `<span>Humidity ${Math.round(humidity)}%</span>` : ""}
-              ${windSpeed != null ? `<span>Wind ${Math.round(windSpeed)} km/h${windBearing ? ` (${windBearing})` : ""}</span>` : ""}
+              ${apparentTemp != null ? `<span>Feels ${this._formatTemp(apparentTemp)}</span>` : ""}
+              ${humidity != null ? `<span>Humidity ${Math.round(Number(humidity))}%</span>` : ""}
+              ${windSpeed != null ? `<span>Wind ${Math.round(Number(windSpeed))} km/h${windBearing ? ` (${windBearing})` : ""}</span>` : ""}
             </div>
           </div>
           ${nextSnow ? `
