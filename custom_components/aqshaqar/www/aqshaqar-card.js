@@ -155,7 +155,6 @@ class AqshaqarCard extends HTMLElement {
           ` : ""}
         </div>
 
-        <div class="label">Daily forecast · Daily snow</div>
         <div class="days">
           ${days.map(day => `
             <div class="day">
