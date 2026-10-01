@@ -57,7 +57,26 @@ class AqshaqarCard extends HTMLElement {
     if (!value) return "—";
     const d = new Date(`${value}T12:00:00`);
     if (Number.isNaN(d.getTime())) return value;
-    return d.toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" });
+    return d.toLocaleDateString("en-GB", {
+      timeZone: "Asia/Almaty",
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+    });
+  }
+
+  _formatUpdate(value) {
+    if (!value) return "—";
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return value;
+    return d.toLocaleString("en-GB", {
+      timeZone: "Asia/Almaty",
+      day: "numeric",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
   }
 
   _formatNextSnow(weather) {
@@ -72,8 +91,17 @@ class AqshaqarCard extends HTMLElement {
       if (!Number.isNaN(d.getTime())) {
         return {
           amount: `❄ ${amount.toLocaleString([], { maximumFractionDigits: 1 })} cm`,
-          date: d.toLocaleDateString([], { day: "numeric", month: "short" }),
-          time: d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false }),
+          date: d.toLocaleDateString("en-GB", {
+            timeZone: "Asia/Almaty",
+            day: "numeric",
+            month: "short",
+          }),
+          time: d.toLocaleTimeString("en-GB", {
+            timeZone: "Asia/Almaty",
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: false,
+          }),
         };
       }
     }
@@ -218,7 +246,7 @@ class AqshaqarCard extends HTMLElement {
               <div class="title">${this.config?.title || "Shymbulak Weather"}</div>
               <div class="subtitle">Aqshaqar · Snow-Forecast</div>
             </div>
-            <div class="update">Next update<br>${update || "—"}</div>
+            <div class="update">Next update<br>${this._formatUpdate(update)}</div>
           </div>
           <div class="stations">
             ${stations.map(([level, title, elevation]) => this._station(level, title, elevation)).join("")}
