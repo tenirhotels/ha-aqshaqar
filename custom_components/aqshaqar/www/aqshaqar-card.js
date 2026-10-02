@@ -177,7 +177,7 @@ class AqshaqarCard extends HTMLElement {
     if (!this._hass) return;
     if (!this.shadowRoot) this.attachShadow({ mode: "open" });
 
-    const stations = [["base", "Base", 2220], ["mid", "Mid", 2692], ["top", "Top", 3163]];
+    const stations = [["top", "Top", 3163], ["mid", "Mid", 2692], ["base", "Base", 2220]];
     const update = this._hass.states?.["sensor.aqshaqar_forecast_update"]?.state;
 
     this.shadowRoot.innerHTML = `
