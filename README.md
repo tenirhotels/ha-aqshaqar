@@ -164,9 +164,32 @@ Card:
 ```yaml
 type: custom:aqshaqar-card
 title: Shymbulak Snow
+stations:
+  - top
+  - mid
+  - base
 ```
 
-The card shows current weather, daily weather forecast, Daily snow and Next snow for 2220 Base, 2692 Mid and 3163 Top together.
+The `stations` key controls both the display order and visibility.
+
+Supported station keys:
+
+- `top` — 3163 Top
+- `mid` — 2692 Mid
+- `base` — 2220 Base
+
+When `stations` is omitted, the default order is `top → mid → base`.
+
+To hide a station, simply omit it. For example:
+
+```yaml
+type: custom:aqshaqar-card
+stations:
+  - top
+  - mid
+```
+
+An explicitly empty `stations: []` hides all station sections.
 
 ## Device naming
 

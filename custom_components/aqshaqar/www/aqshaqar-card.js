@@ -13,7 +13,12 @@ class AqshaqarCard extends HTMLElement {
 
   getCardSize() { return 12; }
 
-  static getStubConfig() { return { title: "Shymbulak Weather" }; }
+  static getStubConfig() {
+    return {
+      title: "Shymbulak Weather",
+      stations: ["top", "mid", "base"],
+    };
+  }
 
   // Aqshaqar weather entities use: weather.aqshaqar_2220_base,
   // weather.aqshaqar_2692_mid and weather.aqshaqar_3163_top.
@@ -117,6 +122,23 @@ class AqshaqarCard extends HTMLElement {
     return weather?.attributes?.daily_forecast || [];
   }
 
+  _stations() {
+    const definitions = {
+      top: ["top", "Top", 3163],
+      mid: ["mid", "Mid", 2692],
+      base: ["base", "Base", 2220],
+    };
+
+    const configured = this.config?.stations;
+    if (!Array.isArray(configured)) {
+      return [definitions.top, definitions.mid, definitions.base];
+    }
+
+    return [...new Set(configured)]
+      .filter((level) => typeof level === "string" && definitions[level])
+      .map((level) => definitions[level]);
+  }
+
   _station(level, title, elevation) {
     const weather = this._weather(level, elevation);
     const days = this._dailyForecast(weather).slice(0, 6);
@@ -177,7 +199,7 @@ class AqshaqarCard extends HTMLElement {
     if (!this._hass) return;
     if (!this.shadowRoot) this.attachShadow({ mode: "open" });
 
-    const stations = [["top", "Top", 3163], ["mid", "Mid", 2692], ["base", "Base", 2220]];
+    const stations = this._stations();
     const update = this._hass.states?.["sensor.aqshaqar_forecast_update"]?.state;
 
     this.shadowRoot.innerHTML = `
